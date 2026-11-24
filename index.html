@@ -50,13 +50,13 @@ button.stat:focus-visible{outline:3px solid #1769ac;outline-offset:3px}
 <label>Foyer fiscal<select name="family"><option value="">Choisir</option><option value="0">Une personne</option><option value="1">Au moins deux personnes</option></select></label>
 <label>Solde de base brute mensuelle (€)<input name="salary" type="number" min=".01" step=".01"></label></div>
 <label>Dates de naissance des enfants à charge pour la mission, une par ligne (AAAA-MM-JJ)<textarea name="births" placeholder="AAAA-MM-JJ"></textarea></label>
-<button>Enregistrer mon profil</button> <span id="profileMessage" role="status"></span></form><small>Barème aéroterrestre de l’arrêté du 17 décembre 2021. ISSE à solde mensuelle, décret n° 97-901. Pour une mission passée, renseigne la situation applicable à cette période. Profil local à cet appareil. Les estimations enregistrées figurent dans la sauvegarde des missions.</small></details></section><section><details><summary>Sauvegarde du carnet</summary><p>Les vols sont enregistrés sur cet appareil. Exporte une copie pour les conserver ou les transférer.</p><p id="backupStatus"></p><button id="backup">Exporter les vols</button> <label>Importer une sauvegarde web<input id="restore" type="file" accept=".json,application/json"></label></details><p id="offline" role="status"></p></section><section><details><summary>Paramètres du référentiel</summary><p>Ajoute les règles que tu as vérifiées pour tes opérations. Elles sont enregistrées sur cet appareil.</p><form id="refForm"><div class="grid">
+<button>Enregistrer mon profil</button> <span id="profileMessage" role="status"></span></form><small>Barème aéroterrestre de l’arrêté du 17 décembre 2021. ISSE à solde mensuelle, décret n° 97-901. Pour une mission passée, renseigne la situation applicable à cette période. Profil local à cet appareil. Les estimations enregistrées figurent dans la sauvegarde des missions.</small></details></section><section><details><summary>Sauvegarde du carnet</summary><p>Les vols sont enregistrés sur cet appareil. Exporte une copie pour les conserver ou les transférer.</p><p id="backupStatus"></p><button id="backup">Exporter les vols</button> <label>Importer une sauvegarde web<input id="restore" type="file" accept=".json,application/json"></label></details><p id="offline" role="status"></p></section><section><details><summary>Paramètres du référentiel</summary><p>Références publiques vérifiées le 24 novembre 2026. Sélectionne l’activité figurant sur ton ordre de mission. Les textes cités ne précisent aucun terrain OACI. Tu peux ajouter tes propres règles par terrain.</p><details><summary>Consulter les références officielles</summary><div id="officialList"></div></details><p></p><form id="refForm"><div class="grid">
 <label>Pays<input name="country" required></label><label>Terrain (code OACI)<input name="icao" required pattern="[A-Za-z]{4}" maxlength="4" autocapitalize="characters"></label><label>Nom de l’opération<input name="operation" required></label><label>Régime<select name="regime"><option>Aucun</option><option>ISAO</option><option>ISSE</option></select></label><label>Valide du<input name="since" type="date" required></label><label>Au (inclus)<input name="until" type="date" required></label></div><button>Enregistrer la règle</button> <button id="cancelRule" type="reset" hidden>Annuler</button></form><p id="refStatus" role="status"></p><div id="rules"></div></details></section>
 <section><h2>Simulation de frais</h2><form id="simulation"><div class="grid"><label>Début de mission<input name="start" type="date"></label><label>Fin de mission<input name="end" type="date"></label></div><label>Opération et terrain<select name="refContext"><option value="">Saisie libre</option></select></label><small class="proposal" role="status"></small><div id="sim-allowance"><label>Prime de mission<select name="scheme"><option value="">Aucune prime renseignée</option><option>ISAO</option><option>ISSE</option></select></label>
 <div id="sim-isaof"><label>Territoire<select name="territory"><option value="">Choisir</option><option value="0">Sur le territoire d’affectation</option><option value="1">Hors du territoire d’affectation</option></select></label>
 <label>Contrôle opérationnel<select name="control"><option value="">Choisir</option><option value="0">Sans contrôle opérationnel</option><option value="1">Sous contrôle opérationnel</option></select></label><label>Jours indemnisables<input name="paidDays" type="number" min="1" step="1"></label><small>Activité aéroterrestre, régime général. Vérifie le créneau complet de 23 h à 5 h.</small></div>
 <div id="sim-issef"><label>Entrée en zone<input name="zoneIn" type="date"></label><label>Sortie de zone<input name="zoneOut" type="date"></label></div>
- <output id="sim-primeResult" aria-live="polite"></output></div></form></section></main>
+ <output id="sim-primeResult" aria-live="polite"></output></div></form></section><footer>Dernière mise à jour de l’application · <time datetime="2026-11-24">24 novembre 2026</time></footer></main>
 <dialog id="editor"><form id="flight"><h2>Fiche de vol</h2><datalist id="terrains"></datalist><div id="fields"></div><div id="allowance"><label>Opération et terrain<select name="refContext"><option value="">Saisie libre</option></select></label><small class="proposal" role="status"></small><label>Prime de mission<select name="scheme"><option value="">Aucune prime renseignée</option><option>ISAO</option><option>ISSE</option></select></label>
 <div id="isaof"><label>Territoire<select name="territory"><option value="">Choisir</option><option value="0">Sur le territoire d’affectation</option><option value="1">Hors du territoire d’affectation</option></select></label>
 <label>Contrôle opérationnel<select name="control"><option value="">Choisir</option><option value="0">Sans contrôle opérationnel</option><option value="1">Sous contrôle opérationnel</option></select></label><label>Jours indemnisables<input name="paidDays" type="number" min="1" step="1"></label><small>Activité aéroterrestre, régime général. Vérifie le créneau complet de 23 h à 5 h.</small></div>
@@ -445,11 +445,25 @@ form.addEventListener('input',e=>{
 });
 const ruleForm=$('refForm'),sim=$('simulation'),ruleKey=key+'.allowanceRules';
 let editRule='';
+const referenceSource='https://www.defense.gouv.fr/sites/default/files/sga/12%20ARR%C3%8AT%C3%89%20fixant%20le%20r%C3%A9f%C3%A9rentiel%20op%C3%A9rationnel.pdf';
+const reportSource='https://www.assemblee-nationale.fr/dyn/16/rapports/cion_def/l16b1808-tiii_rapport-avis.pdf';
+const officialRules=[];
+function addReferences(regime,control,names){
+ for(const operation of names)officialRules.push({operation,regime,control,since:'2022-01-01',source:referenceSource});
+}
+addReferences('ISSE','1',['Dissuasion nucléaire en renfort temporaire extérieur','Intervention urgente à l’étranger (dont EVASAN stratégique ou recherche et sauvetage)','Protection ou évacuation de ressortissants à l’étranger','Renfort temporaire des forces de présence à l’étranger','Projection de puissance à l’étranger','Réassurance OTAN en renfort temporaire extérieur','Mission particulière à l’étranger ordonnée par EMA/CPCO']);
+addReferences('ISAO','1',['Projection de force (transport aérien ou soutien opérationnel inclus)','Renfort temporaire des forces de souveraineté outre-mer','Partenariat militaire opérationnel ou coopération internationale','Cyberdéfense opérationnelle','Recueil de renseignement','Déploiement ou soutien des composantes de la dissuasion','Renfort du commandement d’une OPEX depuis la France','Mission permanente ou opération sur le territoire national','Surveillance et sauvegarde des approches maritimes']);
+addReferences('ISAO','0',['Essais, expertise et évaluations opérationnelles','Soutien opérationnel en métropole (remise en condition)','Concours opérationnel ou rayonnement autorisé','Préparation opérationnelle des forces','Instruction opérationnelle']);
+officialRules.push(
+ {operation:'AIGLE – participation à la réassurance OTAN',country:'Roumanie',regime:'ISSE',since:'2022-02-28',source:reportSource},
+ {operation:'LYNX – participation à la réassurance OTAN',country:'Estonie',regime:'ISSE',since:'2022-01-01',source:reportSource}
+);
+function allRules(){return [...officialRules,...rules()]}
 function rules(){return JSON.parse(localStorage.getItem(ruleKey)||'[]')}
-function contextOf(r){return [r.operation,r.country,r.icao].join(' · ')}
+function contextOf(r){return [r.operation,r.country,r.icao].filter(Boolean).join(' · ')}
 function fillContexts(target,value){
  const select=target.elements.refContext;
- const names=new Set(rules().map(contextOf));
+ const names=new Set(allRules().map(contextOf));
  if(value)names.add(value);
  select.replaceChildren(new Option('Saisie libre',''),...Array.from(names).sort().map(name=>new Option(name,name)));
  select.value=value;
@@ -482,11 +496,12 @@ ruleForm.onsubmit=e=>{
 };
 function refresh(target,propose){
  const v=target.elements,manual=target.dataset.override==='yes',selected=v.refContext.value;
- const matching=selected?rules().filter(r=>contextOf(r)===selected && v.start.value && v.end.value>=v.start.value && r.since<=v.start.value && r.until>=v.end.value):[];
+ const matching=selected?allRules().filter(r=>contextOf(r)===selected && v.start.value && v.end.value>=v.start.value && r.since<=v.start.value && (!r.until||r.until>=v.end.value)):[];
  const regimes=new Set(matching.map(r=>r.regime));
  const suggestion=regimes.size===1?[...regimes][0]:null;
  target.querySelector('.proposal').textContent=selected?(suggestion?'Régime proposé : '+suggestion+'.':regimes.size?'Règles contradictoires. Choisis le régime manuellement.':'Aucune règle couvrant toute la mission.')+(manual?' Choix manuel actif.':''):'';
  if(propose && selected && !manual)v.scheme.value=suggestion==='Aucun'?'':suggestion||'';
+ if(propose && selected && !manual && suggestion==='ISAO' && matching.length && matching.every(r=>r.control===matching[0].control) && matching[0].control!==undefined)v.control.value=matching[0].control;
  if(target===form){
    showScheme();
    if(v.scheme.value&&!v.scheme.disabled)calculate();
@@ -505,6 +520,12 @@ function updateProposal(target,event){
 sim.oninput=e=>updateProposal(sim,e);
 sim.onsubmit=e=>e.preventDefault();
 form.addEventListener('input',e=>{if($('hasFees').value==='yes' && ($('allowance').contains(e.target)||['start','end'].includes(e.target.name)))updateProposal(form,e)});
+for(const rule of officialRules){
+ const item=element('article'),link=element('a','Source officielle');
+ link.href=rule.source;link.target='_blank';link.rel='noopener';
+ item.append(element('strong',contextOf(rule)),element('p',rule.regime+' · À partir du '+dateText(rule.since)+' · Fin non précisée'),link);
+ $('officialList').append(item);
+}
 renderRules();
 render();
 if('serviceWorker' in navigator){
