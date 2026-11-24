@@ -24,7 +24,7 @@ const aircraft=['C130J-30','KC130J','Autre'],missions=['Entraînement','Air tran
 const groups=[
  ['Mission',[['start','Date de départ','date'],['end','Date de fin','date'],['number','Numéro de mission'],['plane','Appareil',aircraft],['mission','Type de mission',missions]]],
  ['Temps de vol',[['hours','Heures','number',0,99999],['minutes','Minutes','number',0,59],['sectors','Secteurs','number',0,30]]],
- ['Équipage',[['role','Fonction',roles],['loadmaster','Loadmaster']]],
+ ['Équipage',[['role','Fonction',roles]]],
  ['Trajet',[['departure','Départ'],['arrival','Arrivée']]],
  ['Suivi',[['fee','Frais de mission',fees],['notes','Remarques','textarea']]]];
 const key='carnet.vol.v2.'+location.pathname.replace(/index\.html$/,'');
