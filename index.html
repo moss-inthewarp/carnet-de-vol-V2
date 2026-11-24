@@ -12,6 +12,9 @@ article.flight-card{background:white;border-radius:14px;border-left:4px solid #1
 .flight-head,.fee-row,.stop-row{display:flex;align-items:center;gap:.6rem}
 .flight-head,.fee-row{justify-content:space-between;flex-wrap:wrap}
 .flight-time{color:#1769ac;font-weight:750;font-variant-numeric:tabular-nums}
+.flight-card .actions button{min-height:32px;padding:.2rem .6rem;font-size:.85rem}
+.flight-notes{white-space:pre-wrap}
+.flight-notes b{display:block;font-size:.85rem}
 .flight-meta{color:#526164}.fee-row{margin:.75rem 0;font-weight:650}
 .pending{color:#995000}.received{color:#237246}.no-fee{color:#596363}
 .receive{background:#ddf4e5;border:0;color:#216637;border-radius:30px;font-weight:650}
@@ -144,6 +147,13 @@ function render(){
  card.append(head,meta,element('p',f.role+' · '+f.sectors+' secteur(s)'));
  if(f.departure||f.arrival||f.stops?.length){
    card.append(element('p',[f.departure||'—',...(f.stops||[]),f.arrival||'—'].join(' → ')));
+ }
+ const notes = f.notes?.trim();
+ if (notes) {
+   const paragraph = element('p', notes);
+   paragraph.className = 'flight-notes';
+   paragraph.prepend(element('b', 'Remarques'));
+   card.append(paragraph);
  }
  card.append(feeRow(f));
  const edit=element('button','Modifier'),del=element('button','Supprimer');del.className='warn';edit.onclick=()=>openFlight(f);del.onclick=()=>{if(confirm('Supprimer ce vol du carnet ?'))change(list=>list.filter(x=>x.id!==f.id))};const buttons=element('div');buttons.className='actions';buttons.append(edit,del);card.append(buttons);$('history').append(card)}
