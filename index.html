@@ -30,13 +30,15 @@ article.flight-card{margin:0;padding:.65rem 0;border:0;border-radius:0;border-to
  background-image:linear-gradient(0deg,rgba(14,26,31,.94),rgba(14,26,31,.8) 30%,transparent 66%),url('./c130j-bandeau.jpg')}
  header small{color:#edf2ef}
 }
+button.stat{text-align:left;color:inherit}button.stat:hover,button.stat:focus-visible{border-color:#34766b}
+#offline,#backupStatus{font-size:.87rem;color:#526164}
 </style><header><small>C-130J &nbsp; / &nbsp; JOURNAL PERSONNEL</small><h1>Carnet de vol</h1><button class="primary" id="add">＋ Ajouter un vol</button></header><main>
 <h2>Bilan des vols</h2><div class="grid stats" id="stats"></div><section><h2>Historique des vols</h2><form id="filters"><label>Rechercher<input type="search" name="search" placeholder="Lieu, équipage, numéro de mission…"></label><details><summary>Filtres</summary><div class="grid" id="filterFields"></div><button class="primary" type="submit">Appliquer les filtres</button> <button type="reset">Réinitialiser les filtres</button></details></form><div id="history"></div></section>
 <section><h2>Heures</h2>
 <div class="grid"><label>Année<select id="fleetYear"><option value="">Toutes les années</option></select></label>
 <label>Mois<select id="fleetMonth"><option value="">Tous les mois</option></select></label>
-<label>Type d’appareil<select id="fleetAircraft"><option value="">Tous les appareils</option></select></label></div><div id="fleet"></div></section><section><details><summary>Sauvegarde du carnet</summary><p>Les vols sont enregistrés sur cet appareil. Exporte une copie pour les conserver ou les transférer.</p><button id="backup">Exporter les vols</button> <label>Importer une sauvegarde web<input id="restore" type="file" accept=".json,application/json"></label></details></section></main>
-<dialog id="editor"><form id="flight"><h2>Fiche de vol</h2><div id="fields"></div><div class="actions"><button class="primary">Enregistrer</button><button type="button" id="cancel">Annuler</button></div></form></dialog>
+<label>Type d’appareil<select id="fleetAircraft"><option value="">Tous les appareils</option></select></label></div><div id="fleet"></div><button id="csv">Exporter la sélection (CSV)</button></section><section><details><summary>Sauvegarde du carnet</summary><p>Les vols sont enregistrés sur cet appareil. Exporte une copie pour les conserver ou les transférer.</p><p id="backupStatus"></p><button id="backup">Exporter les vols</button> <label>Importer une sauvegarde web<input id="restore" type="file" accept=".json,application/json"></label></details><p id="offline" role="status"></p></section></main>
+<dialog id="editor"><form id="flight"><h2>Fiche de vol</h2><datalist id="terrains"></datalist><div id="fields"></div><div class="actions"><button class="primary">Enregistrer</button><button type="button" id="cancel">Annuler</button></div></form></dialog>
 <script>
 'use strict';
 const $=id=>document.getElementById(id);
@@ -55,6 +57,7 @@ function field(parent,[name,title,type,min,max],optional=false){
  const label=element('label',title);const select=Array.isArray(type);
  const control=element(select?'select':type==='textarea'?'textarea':'input');
  control.name=name;
+ if(name==='departure'||name==='arrival')control.setAttribute('list','terrains');
  if(select){if(name==='serviceCode'){const empty=new Option('À renseigner','');empty.disabled=true;empty.defaultSelected=true;control.add(empty)}for(const value of type)control.add(new Option(value||'Tous',value))}
  else if(type!=='textarea')control.type=type||'text';
  if(type==='number'){control.min=min;control.max=max;control.step=1}
@@ -65,7 +68,7 @@ const stopList=element('div');
 function appendStop(value=''){
  const row=element('div'),label=element('label','Escale'),input=element('input');
  const remove=element('button','Retirer');
- row.className='stop-row';input.value=value;remove.type='button';
+ row.className='stop-row';input.value=value;input.setAttribute('list','terrains');remove.type='button';
  remove.setAttribute('aria-label','Retirer cette escale');
  remove.onclick=()=>row.remove();
  label.append(input);row.append(label,remove);stopList.append(row);
@@ -90,15 +93,19 @@ months.forEach((name,i)=>monthSelect.add(new Option(name,String(i+1).padStart(2,
 const aircraftSelect=$('fleetAircraft');
 for(const plane of aircraft)aircraftSelect.add(new Option(plane,plane));
 yearSelect.onchange=monthSelect.onchange=aircraftSelect.onchange=render;
+function selectFleet(all){
+ return all.filter(f=>(!yearSelect.value||f.start.slice(0,4)===yearSelect.value)&&
+   (!monthSelect.value||f.start.slice(5,7)===monthSelect.value)&&
+   (!aircraftSelect.value||f.plane===aircraftSelect.value));
+}
 function renderFleet(all){
  const previousYear=yearSelect.value;
  const years=[...new Set(all.map(f=>f.start.slice(0,4)))].sort().reverse();
  yearSelect.replaceChildren(new Option('Toutes les années',''),...years.map(year=>new Option(year,year)));
  if(years.includes(previousYear))yearSelect.value=previousYear;
- const selected=all.filter(f=>(!yearSelect.value||f.start.slice(0,4)===yearSelect.value)&&
-   (!monthSelect.value||f.start.slice(5,7)===monthSelect.value)&&
-   (!aircraftSelect.value||f.plane===aircraftSelect.value));
+ const selected=selectFleet(all);
  const fleet=$('fleet');
+ $('csv').disabled=!selected.length;
  fleet.replaceChildren();
  const minutes=selected.reduce((n,f)=>n+total(f),0);
  const label=aircraftSelect.value||'Tous les appareils';
@@ -121,13 +128,24 @@ function feeRow(f){
 let appliedFilters=null;
 function render(){
  let all;try{all=records()}catch{$('history').textContent='Le stockage du carnet est inaccessible.';return}
+ renderTerrains(all);
+ renderBackup(all);
  const q=appliedFilters||{};const search=filters.elements.search.value.trim().toLocaleLowerCase('fr');
  const rows=all.filter(f=>
  (!q.plane||q.plane===f.plane)&&(!q.mission||q.mission===f.mission)&&(!q.fee||q.fee===f.fee)&&(!q.from||f.end>=q.from)&&(!q.to||f.start<=q.to)&&Object.values(f).join(' ').toLocaleLowerCase('fr').includes(search)).sort((a,b)=>b.start.localeCompare(a.start));
  const sum=all.reduce((n,f)=>n+total(f),0);
  $('stats').replaceChildren();
  for(const [label,v] of [['Heures de vol',duration(sum)],['Vols',all.length],['Secteurs',all.reduce((n,f)=>n+Number(f.sectors),0)],['Frais en attente',all.filter(f=>f.fee==='En attente').length]]){
- const tile=element('div');tile.className='stat';const value=element('strong',v);
+ const pendingTile=label==='Frais en attente';
+ const tile=element(pendingTile?'button':'div');tile.className='stat';
+ if(pendingTile)tile.onclick=()=>{
+   filters.reset();
+   filters.elements.fee.value='En attente';
+   filters.querySelector('details').open=true;
+   filters.requestSubmit();
+   filters.elements.fee.focus();
+ };
+ const value=element('strong',v);
  if(label==='Frais en attente'&&v>0)value.className='pending';
  tile.append(element('small',label),value);$('stats').append(tile)}
  $('history').replaceChildren();
@@ -172,7 +190,7 @@ function openFlight(f){const now=new Date();const today=new Date(now-now.getTime
   previous.dataset.legacy='';
   roleSelect.add(previous);
  }
- stopList.replaceChildren();for(const stop of f?.stops||[])appendStop(stop);const values=f||{departure:'Evreux',arrival:'Evreux',serviceCode:'22',start:today,end:today,hours:1,minutes:0,sectors:1,role:'ALM'};for(const [k,v] of Object.entries(values)){if(form.elements[k])form.elements[k].value=v}form.elements.end.min=form.elements.start.value;$('editor').showModal()}
+ stopList.replaceChildren();for(const stop of f?.stops||[])appendStop(stop);const values=f||{departure:'Évreux',arrival:'Évreux',serviceCode:'22',start:today,end:today,hours:1,minutes:0,sectors:1,role:'ALM'};for(const [k,v] of Object.entries(values)){if(form.elements[k])form.elements[k].value=v}form.elements.end.min=form.elements.start.value;$('editor').showModal()}
 form.elements.start.onchange=()=>{const {start,end}=form.elements;end.min=start.value;if(end.value<start.value)end.value=start.value};
 form.onsubmit=e=>{e.preventDefault();const f=Object.fromEntries(new FormData(form));f.stops=Array.from(stopList.querySelectorAll("input"),input=>input.value.trim()).filter(Boolean);f.id=editing||crypto.randomUUID();if(change(list=>[...list.filter(x=>x.id!==f.id),{...list.find(x=>x.id===f.id),...f}]))$('editor').close()};
 $('add').onclick=()=>openFlight();$('cancel').onclick=()=>$('editor').close();filters.elements.search.oninput=render;
@@ -182,8 +200,60 @@ filters.onsubmit=e=>{
  render();
 };
 filters.onreset=()=>{appliedFilters=null;setTimeout(render)};window.addEventListener('storage',render);
-$('backup').onclick=()=>{const url=URL.createObjectURL(new Blob([JSON.stringify({version:1,flights:records()},null,2)],{type:'application/json'}));const a=element('a');a.href=url;a.download='carnet-de-vol.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),3000)};
+function renderTerrains(all){
+ const names=new Map();
+ for(const f of all){
+   for(const value of [f.departure,...(f.stops||[]),f.arrival]){
+     const name=value?.trim();
+     if(!name)continue;
+     const normalized=name.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLocaleLowerCase('fr');
+     if(!names.has(normalized)||name!==name.normalize('NFD'))names.set(normalized,name);
+   }
+ }
+ $('terrains').replaceChildren(...Array.from(names.values()).sort((a,b)=>a.localeCompare(b,'fr')).map(name=>new Option(name,name)));
+}
+function download(blob,filename){
+ const url=URL.createObjectURL(blob),link=element('a');
+ link.href=url;link.download=filename;document.body.append(link);link.click();link.remove();
+ setTimeout(()=>URL.revokeObjectURL(url),30000);
+}
+function csvCell(value){
+ let text=String(value??'');
+ if(/^\s*[=+@-]/.test(text))text="'"+text;
+ return '"'+text.replaceAll('"','""')+'"';
+}
+$('csv').onclick=()=>{
+ const rows=[['Départ (date)','Fin (date)','N° mission','Code service aérien','Appareil','Mission','Fonction','Départ','Escales','Arrivée','Secteurs','Durée (h:mm)','Durée (minutes)','Frais','Remarques']];
+ for(const f of selectFleet(records()).sort((a,b)=>a.start.localeCompare(b.start))){
+   rows.push([f.start,f.end,f.number,f.serviceCode,f.plane,f.mission,f.role,f.departure,(f.stops||[]).join(' → '),f.arrival,f.sectors,f.hours+':'+String(f.minutes).padStart(2,'0'),total(f),f.fee,f.notes]);
+ }
+ const csv=rows.map(row=>row.map(csvCell).join(';')).join('\r\n');
+ download(new Blob(['\uFEFF',csv],{type:'text/csv;charset=utf-8'}),['vols',yearSelect.value,monthSelect.value,aircraftSelect.value].filter(Boolean).join('-')+'.csv');
+};
+const backupKey=key+'.lastBackup';
+function renderBackup(all){
+ const status=$('backupStatus');
+ let saved;
+ try{saved=JSON.parse(localStorage.getItem(backupKey))}catch{}
+ if(!saved||!Array.isArray(saved.ids)){status.textContent='Aucune sauvegarde datée sur cet appareil.';return}
+ const ids=new Set(saved.ids);
+ const count=all.filter(f=>!ids.has(f.id)).length;
+ status.textContent='Dernier export JSON le '+new Date(saved.date).toLocaleString('fr-FR')+' · '+count+' nouvelle'+(count>1?'s':'')+' mission'+(count>1?'s':'')+' depuis cet export.';
+}
+$('backup').onclick=()=>{
+ const flights=records();
+ download(new Blob([JSON.stringify({version:1,flights},null,2)],{type:'application/json'}),'carnet-de-vol.json');
+ try{
+   localStorage.setItem(backupKey,JSON.stringify({date:new Date().toISOString(),ids:flights.map(f=>f.id)}));
+   renderBackup(flights);
+ }catch{alert('Export lancé. La date de sauvegarde n’a pas pu être mémorisée.')}
+};
 function valid(f){return f&&typeof f.id==='string'&&f.id.length>0&&(f.stops===undefined||(Array.isArray(f.stops)&&f.stops.every(stop=>typeof stop==="string")))&&groups.every(([,fields])=>fields.every(([k,,type,min,max])=>{const v=f[k];if(k==='serviceCode'&&(v===undefined||v===''))return true;if(typeof v!=='string')return false;if(k==='role' && ['TLM 1','TLM 2'].includes(v))return true;if(Array.isArray(type))return type.includes(v);if(type==='number')return /^\d+$/.test(v)&&Number(v)>=min&&Number(v)<=max;if(type==='date')return /^\d{4}-\d\d-\d\d$/.test(v)&&new Date(v).toISOString().slice(0,10)===v;return true}))&&f.end>=f.start}
 $('restore').onchange=async e=>{try{const data=JSON.parse(await e.target.files[0].text());if(data.version!==1||!Array.isArray(data.flights)||!data.flights.every(valid))throw Error();if(confirm('Importer '+data.flights.length+' vol(s) ? Les fiches de même identifiant seront mises à jour.'))change(list=>Array.from(new Map([...list,...data.flights].map(f=>[f.id,f])).values()))}catch{alert('Cette sauvegarde web est illisible.')}finally{e.target.value=''}};
 render();
+if('serviceWorker' in navigator){
+ navigator.serviceWorker.register('./carnet-offline.js').then(()=>navigator.serviceWorker.ready)
+ .then(()=>{$('offline').textContent='Carnet disponible hors connexion sur cet appareil.'})
+ .catch(()=>{$('offline').textContent='Mode hors connexion indisponible sur cet appareil.'});
+}
 </script></html>
