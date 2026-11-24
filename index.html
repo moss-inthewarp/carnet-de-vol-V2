@@ -30,7 +30,12 @@ article.flight-card{margin:0;padding:.65rem 0;border:0;border-radius:0;border-to
  background-image:linear-gradient(0deg,rgba(14,26,31,.94),rgba(14,26,31,.8) 30%,transparent 66%),url('./c130j-bandeau.jpg')}
  header small{color:#edf2ef}
 }
-button.stat{text-align:left;color:inherit}button.stat:hover,button.stat:focus-visible{border-color:#34766b}
+button.stat{text-align:left;color:#fff;background:#185954;border:1px solid #124a46}
+button.stat strong{color:#fff}
+button.stat:hover{background:#104b47}
+button.stat:focus-visible{outline:3px solid #1769ac;outline-offset:3px}
+.stat-link{display:flex;align-items:center;justify-content:space-between;gap:.4rem;margin-top:.35rem;font-size:.85rem;font-weight:650}
+.stat-link::after{content:'→';font-size:1.1rem}
 #offline,#backupStatus{font-size:.87rem;color:#526164}
 </style><header><small>C-130J &nbsp; / &nbsp; JOURNAL PERSONNEL</small><h1>Carnet de vol</h1><button class="primary" id="add">＋ Ajouter un vol</button></header><main>
 <h2>Bilan des vols</h2><div class="grid stats" id="stats"></div><section><h2>Historique des vols</h2><form id="filters"><label>Rechercher<input type="search" name="search" placeholder="Lieu, équipage, numéro de mission…"></label><details><summary>Filtres</summary><div class="grid" id="filterFields"></div><button class="primary" type="submit">Appliquer les filtres</button> <button type="reset">Réinitialiser les filtres</button></details></form><div id="history"></div></section>
@@ -159,7 +164,12 @@ function render(){
  };
  const value=element('strong',v);
  if(label==='Frais en attente'&&v>0)value.className='pending';
- tile.append(element('small',label),value);$('stats').append(tile)}
+ tile.append(element('small',label),value);
+ if(pendingTile){
+   const link=element('span','Voir les vols');link.className='stat-link';
+   tile.append(link);tile.setAttribute('aria-controls','history');
+ }
+ $('stats').append(tile)}
  $('history').replaceChildren();
  renderFleet(all);
  if(!rows.length){
