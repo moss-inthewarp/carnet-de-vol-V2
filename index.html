@@ -4,7 +4,9 @@
 *{box-sizing:border-box}body{margin:0;background:#f3f4ee;color:#163737;font:16px/1.5 system-ui,sans-serif}header{background:#163f43;color:#f8f8ec;padding:2.4rem max(5vw,calc((100% - 1050px)/2)) 2rem;border-bottom:5px solid #f0b76b}header small{font:600 .78rem monospace;letter-spacing:.14em;color:#b9d5cd}h1{font-size:clamp(2.4rem,7vw,4.2rem);line-height:1;margin:.55rem 0 1.45rem;letter-spacing:-.05em}main{max-width:1090px;margin:auto;padding:1.5rem 20px 4rem}h2{font-size:1.35rem;margin:0 0 .8rem}button,summary{cursor:pointer}button,input,select,textarea{font:inherit;color:inherit}button{background:#fff;border:1px solid #bdcbc5;border-radius:8px;padding:.55rem .9rem;min-height:44px}.primary{background:#ffd197;border:0;color:#263a34;font-weight:700}section,article,dialog{border:1px solid #d4ded6;border-radius:14px;background:#fff;padding:1.1rem;margin-bottom:1rem}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,145px),1fr));gap:.8rem}.stats{margin-bottom:1.3rem}.stat{background:#fff;border-bottom:3px solid #6f9991;padding:.85rem;border-radius:9px}.stat strong{display:block;font:600 1.9rem monospace;margin-top:.25rem}.stat small,label{font-weight:600}input,select,textarea{display:block;width:100%;min-width:0;padding:.55rem;border:1px solid #b9c9c3;border-radius:6px;background:white;margin:.25rem 0 .65rem}summary{padding:.6rem 0;font-weight:650}dialog{margin:auto;width:min(580px,95vw);max-height:90dvh;overflow:auto}dialog::backdrop{background:#132d32aa}fieldset{border:0;border-top:1px solid #d5ded9;padding:1rem 0 .4rem;margin:0}legend{font-weight:750}article{border-radius:8px;background:#f8faf6;margin:.7rem 0 0}article strong{font-size:1.15rem}p{margin:.5rem 0 .8rem}progress{accent-color:#34766b;width:min(100%,320px)}.actions{display:flex;gap:.6rem;flex-wrap:wrap}.empty{padding:1.2rem 0;text-align:center;color:#526a64}.warn{color:#923e32}label{font-size:.9rem}textarea{resize:vertical}
 </style><header><small>C-130J &nbsp; / &nbsp; JOURNAL PERSONNEL</small><h1>Carnet de vol</h1><button class="primary" id="add">＋ Ajouter un vol</button></header><main>
 <h2>Bilan des vols</h2><div class="grid stats" id="stats"></div><section><h2>Historique des vols</h2><form id="filters"><label>Rechercher<input type="search" name="search" placeholder="Lieu, équipage, numéro de mission…"></label><details><summary>Filtres</summary><div class="grid" id="filterFields"></div><button type="reset">Réinitialiser les filtres</button></details></form><div id="history"></div></section>
-<section><h2>Heures par appareil</h2><div id="fleet"></div></section><section><details><summary>Sauvegarde du carnet</summary><p>Les vols sont enregistrés sur cet appareil. Exporte une copie pour les conserver ou les transférer.</p><button id="backup">Exporter les vols</button> <label>Importer une sauvegarde web<input id="restore" type="file" accept=".json,application/json"></label></details></section></main>
+<section><h2>Heures par appareil</h2>
+<div class="grid"><label>Année<select id="fleetYear"><option value="">Toutes les années</option></select></label>
+<label>Mois<select id="fleetMonth"><option value="">Tous les mois</option></select></label></div><div id="fleet"></div></section><section><details><summary>Sauvegarde du carnet</summary><p>Les vols sont enregistrés sur cet appareil. Exporte une copie pour les conserver ou les transférer.</p><button id="backup">Exporter les vols</button> <label>Importer une sauvegarde web<input id="restore" type="file" accept=".json,application/json"></label></details></section></main>
 <dialog id="editor"><form id="flight"><h2>Fiche de vol</h2><div id="fields"></div><div class="actions"><button class="primary">Enregistrer</button><button type="button" id="cancel">Annuler</button></div></form></dialog>
 <script>
 'use strict';
@@ -13,7 +15,7 @@ const aircraft=['C130J-30','KC130J','Autre'],missions=['Entraînement','Air tran
 const groups=[
  ['Mission',[['start','Date de départ','date'],['end','Date de fin','date'],['number','Numéro de mission'],['plane','Appareil',aircraft],['mission','Type de mission',missions]]],
  ['Temps de vol',[['hours','Heures','number',0,99999],['minutes','Minutes','number',0,59],['sectors','Secteurs','number',0,30]]],
- ['Équipage',[['role','Fonction',roles],['loadmaster','Loadmaster'],['copilot','Copilote']]],
+ ['Équipage',[['role','Fonction',roles],['loadmaster','Loadmaster']]],
  ['Trajet',[['departure','Départ'],['arrival','Arrivée']]],
  ['Suivi',[['fee','Frais de mission',fees],['notes','Remarques','textarea']]]];
 const key='carnet.vol.v2.'+location.pathname.replace(/index\.html$/,'');
@@ -37,6 +39,32 @@ function change(update){try{localStorage.setItem(key,JSON.stringify(update(recor
 function dateText(s){return s.split('-').reverse().join('/')}
 function duration(m){return Math.floor(m/60)+' h '+String(m%60).padStart(2,'0')}
 function total(f){return Number(f.hours)*60+Number(f.minutes)}
+const yearSelect=$('fleetYear'),monthSelect=$('fleetMonth');
+const months=['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
+months.forEach((name,i)=>monthSelect.add(new Option(name,String(i+1).padStart(2,'0'))));
+yearSelect.onchange=monthSelect.onchange=render;
+function renderFleet(rows,all){
+ const previousYear=yearSelect.value;
+ const years=[...new Set(all.map(f=>f.start.slice(0,4)))].sort().reverse();
+ yearSelect.replaceChildren(new Option('Toutes les années',''),...years.map(year=>new Option(year,year)));
+ if(years.includes(previousYear))yearSelect.value=previousYear;
+ const selected=rows.filter(f=>(!yearSelect.value||f.start.slice(0,4)===yearSelect.value)&&
+   (!monthSelect.value||f.start.slice(5,7)===monthSelect.value));
+ const fleet=$('fleet');
+ fleet.replaceChildren();
+ if(!selected.length){fleet.textContent='Aucun vol sur la période sélectionnée.';return}
+ const sum=selected.reduce((n,f)=>n+total(f),0);
+ for(const plane of aircraft){
+   const flights=selected.filter(f=>f.plane===plane);
+   if(!flights.length)continue;
+   const minutes=flights.reduce((n,f)=>n+total(f),0);
+   const bar=element('progress');
+   bar.max=sum||1;
+   bar.value=minutes;
+   bar.setAttribute('aria-label',plane);
+   fleet.append(element('p',plane+' · '+duration(minutes)),bar);
+ }
+}
 function render(){
  let all;try{all=records()}catch{$('history').textContent='Le stockage du carnet est inaccessible.';return}
  const q=Object.fromEntries(new FormData(filters));const rows=all.filter(f=>
@@ -45,15 +73,15 @@ function render(){
  $('stats').replaceChildren();
  for(const [label,v] of [['Heures de vol',duration(sum)],['Vols',rows.length],['Secteurs',rows.reduce((n,f)=>n+Number(f.sectors),0)],['Moyenne par vol',duration(rows.length?Math.floor(sum/rows.length):0)],['Frais en attente',rows.filter(f=>f.fee==='En attente').length]]){
  const tile=element('div');tile.className='stat';tile.append(element('small',label),element('strong',v));$('stats').append(tile)}
- $('history').replaceChildren();$('fleet').replaceChildren();
- if(!rows.length){const msg=element('p',all.length?'Aucun vol ne correspond à ces filtres.':'Ton carnet est vide. Ajoute ton premier vol pour commencer.');msg.className='empty';$('history').append(msg);$('fleet').textContent='Aucune heure sur la sélection.'}
- for(const plane of aircraft){const part=rows.filter(f=>f.plane===plane);if(!part.length)continue;const n=part.reduce((a,f)=>a+total(f),0),bar=element('progress');bar.max=sum||1;bar.value=n;bar.setAttribute('aria-label',plane);$('fleet').append(element('p',plane+' · '+duration(n)),bar)}
+ $('history').replaceChildren();
+ if(!rows.length){const msg=element('p',all.length?'Aucun vol ne correspond à ces filtres.':'Ton carnet est vide. Ajoute ton premier vol pour commencer.');msg.className='empty';$('history').append(msg)}
+ renderFleet(rows,all);
  for(const f of rows){const card=element('article');card.append(element('strong',(f.departure||'—')+' → '+(f.arrival||'—')),element('p',dateText(f.start)+(f.start===f.end?'':' – '+dateText(f.end))+' · '+duration(total(f))),element('p',[f.plane,f.mission,f.number&&'N° '+f.number,f.role,f.sectors+' secteur(s)',f.fee].filter(Boolean).join(' · ')));
  const edit=element('button','Modifier'),del=element('button','Supprimer');del.className='warn';edit.onclick=()=>openFlight(f);del.onclick=()=>{if(confirm('Supprimer ce vol du carnet ?'))change(list=>list.filter(x=>x.id!==f.id))};const buttons=element('div');buttons.className='actions';buttons.append(edit,del);card.append(buttons);$('history').append(card)}
 }
 function openFlight(f){const now=new Date();const today=new Date(now-now.getTimezoneOffset()*60000).toISOString().slice(0,10);editing=f?.id||null;form.reset();const values=f||{start:today,end:today,hours:1,minutes:0,sectors:1,role:'ALM'};for(const [k,v] of Object.entries(values)){if(form.elements[k])form.elements[k].value=v}form.elements.end.min=form.elements.start.value;$('editor').showModal()}
 form.elements.start.onchange=()=>{const {start,end}=form.elements;end.min=start.value;if(end.value<start.value)end.value=start.value};
-form.onsubmit=e=>{e.preventDefault();const f=Object.fromEntries(new FormData(form));f.id=editing||crypto.randomUUID();if(change(list=>[...list.filter(x=>x.id!==f.id),f]))$('editor').close()};
+form.onsubmit=e=>{e.preventDefault();const f=Object.fromEntries(new FormData(form));f.id=editing||crypto.randomUUID();if(change(list=>[...list.filter(x=>x.id!==f.id),{...list.find(x=>x.id===f.id),...f}]))$('editor').close()};
 $('add').onclick=()=>openFlight();$('cancel').onclick=()=>$('editor').close();filters.oninput=render;filters.onreset=()=>setTimeout(render);window.addEventListener('storage',render);
 $('backup').onclick=()=>{const url=URL.createObjectURL(new Blob([JSON.stringify({version:1,flights:records()},null,2)],{type:'application/json'}));const a=element('a');a.href=url;a.download='carnet-de-vol.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),3000)};
 function valid(f){return f&&typeof f.id==='string'&&f.id.length>0&&groups.every(([,fields])=>fields.every(([k,,type,min,max])=>{const v=f[k];if(typeof v!=='string')return false;if(Array.isArray(type))return type.includes(v);if(type==='number')return /^\d+$/.test(v)&&Number(v)>=min&&Number(v)<=max;if(type==='date')return /^\d{4}-\d\d-\d\d$/.test(v)&&new Date(v).toISOString().slice(0,10)===v;return true}))&&f.end>=f.start}
