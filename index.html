@@ -50,8 +50,14 @@ button.stat:focus-visible{outline:3px solid #1769ac;outline-offset:3px}
 <label>Foyer fiscal<select name="family"><option value="">Choisir</option><option value="0">Une personne</option><option value="1">Au moins deux personnes</option></select></label>
 <label>Solde de base brute mensuelle (€)<input name="salary" type="number" min=".01" step=".01"></label></div>
 <label>Dates de naissance des enfants à charge pour la mission, une par ligne (AAAA-MM-JJ)<textarea name="births" placeholder="AAAA-MM-JJ"></textarea></label>
-<button>Enregistrer mon profil</button> <span id="profileMessage" role="status"></span></form><small>Barème aéroterrestre de l’arrêté du 17 décembre 2021. ISSE à solde mensuelle, décret n° 97-901. Pour une mission passée, renseigne la situation applicable à cette période. Profil local à cet appareil. Les estimations enregistrées figurent dans la sauvegarde des missions.</small></details></section><section><details><summary>Sauvegarde du carnet</summary><p>Les vols sont enregistrés sur cet appareil. Exporte une copie pour les conserver ou les transférer.</p><p id="backupStatus"></p><button id="backup">Exporter les vols</button> <label>Importer une sauvegarde web<input id="restore" type="file" accept=".json,application/json"></label></details><p id="offline" role="status"></p></section></main>
-<dialog id="editor"><form id="flight"><h2>Fiche de vol</h2><datalist id="terrains"></datalist><div id="fields"></div><div id="allowance"><label>Prime de mission<select name="scheme"><option value="">Aucune prime renseignée</option><option>ISAO</option><option>ISSE</option></select></label>
+<button>Enregistrer mon profil</button> <span id="profileMessage" role="status"></span></form><small>Barème aéroterrestre de l’arrêté du 17 décembre 2021. ISSE à solde mensuelle, décret n° 97-901. Pour une mission passée, renseigne la situation applicable à cette période. Profil local à cet appareil. Les estimations enregistrées figurent dans la sauvegarde des missions.</small></details></section><section><details><summary>Sauvegarde du carnet</summary><p>Les vols sont enregistrés sur cet appareil. Exporte une copie pour les conserver ou les transférer.</p><p id="backupStatus"></p><button id="backup">Exporter les vols</button> <label>Importer une sauvegarde web<input id="restore" type="file" accept=".json,application/json"></label></details><p id="offline" role="status"></p></section><section><details><summary>Paramètres du référentiel</summary><p>Ajoute les règles que tu as vérifiées pour tes opérations. Elles sont enregistrées sur cet appareil.</p><form id="refForm"><div class="grid">
+<label>Pays<input name="country" required></label><label>Terrain (code OACI)<input name="icao" required pattern="[A-Za-z]{4}" maxlength="4" autocapitalize="characters"></label><label>Nom de l’opération<input name="operation" required></label><label>Régime<select name="regime"><option>Aucun</option><option>ISAO</option><option>ISSE</option></select></label><label>Valide du<input name="since" type="date" required></label><label>Au (inclus)<input name="until" type="date" required></label></div><button>Enregistrer la règle</button> <button id="cancelRule" type="reset" hidden>Annuler</button></form><p id="refStatus" role="status"></p><div id="rules"></div></details></section>
+<section><h2>Simulation de frais</h2><form id="simulation"><div class="grid"><label>Début de mission<input name="start" type="date"></label><label>Fin de mission<input name="end" type="date"></label></div><label>Opération et terrain<select name="refContext"><option value="">Saisie libre</option></select></label><small class="proposal" role="status"></small><div id="sim-allowance"><label>Prime de mission<select name="scheme"><option value="">Aucune prime renseignée</option><option>ISAO</option><option>ISSE</option></select></label>
+<div id="sim-isaof"><label>Territoire<select name="territory"><option value="">Choisir</option><option value="0">Sur le territoire d’affectation</option><option value="1">Hors du territoire d’affectation</option></select></label>
+<label>Contrôle opérationnel<select name="control"><option value="">Choisir</option><option value="0">Sans contrôle opérationnel</option><option value="1">Sous contrôle opérationnel</option></select></label><label>Jours indemnisables<input name="paidDays" type="number" min="1" step="1"></label><small>Activité aéroterrestre, régime général. Vérifie le créneau complet de 23 h à 5 h.</small></div>
+<div id="sim-issef"><label>Entrée en zone<input name="zoneIn" type="date"></label><label>Sortie de zone<input name="zoneOut" type="date"></label></div>
+ <output id="sim-primeResult" aria-live="polite"></output></div></form></section></main>
+<dialog id="editor"><form id="flight"><h2>Fiche de vol</h2><datalist id="terrains"></datalist><div id="fields"></div><div id="allowance"><label>Opération et terrain<select name="refContext"><option value="">Saisie libre</option></select></label><small class="proposal" role="status"></small><label>Prime de mission<select name="scheme"><option value="">Aucune prime renseignée</option><option>ISAO</option><option>ISSE</option></select></label>
 <div id="isaof"><label>Territoire<select name="territory"><option value="">Choisir</option><option value="0">Sur le territoire d’affectation</option><option value="1">Hors du territoire d’affectation</option></select></label>
 <label>Contrôle opérationnel<select name="control"><option value="">Choisir</option><option value="0">Sans contrôle opérationnel</option><option value="1">Sous contrôle opérationnel</option></select></label><label>Jours indemnisables<input name="paidDays" type="number" min="1" step="1"></label><small>Activité aéroterrestre, régime général. Vérifie le créneau complet de 23 h à 5 h.</small></div>
 <div id="issef"><label>Entrée en zone<input name="zoneIn" type="date"></label><label>Sortie de zone<input name="zoneOut" type="date"></label></div>
@@ -245,21 +251,22 @@ function openFlight(f){const now=new Date();const today=new Date(now-now.getTime
   previous.dataset.legacy='';
   roleSelect.add(previous);
  }
- stopList.replaceChildren();for(const stop of f?.stops||[])appendStop(stop);const values=f||{departure:'Évreux',arrival:'Évreux',serviceCode:'22',start:today,end:today,hours:1,minutes:0,sectors:1,role:'ALM'};for(const [k,v] of Object.entries(values)){if(form.elements[k])form.elements[k].value=v}form.elements.end.min=form.elements.start.value;form.dataset.estimate=f?.estimate||'';$('hasFees').value=f&&(f.fee==='En attente'||f.fee==='Reçus'||f.scheme)?'yes':'no';syncTracking();$('flightMessage').textContent='';initialFields=readFields();$('editor').showModal()}
+ stopList.replaceChildren();for(const stop of f?.stops||[])appendStop(stop);const values=f||{departure:'Évreux',arrival:'Évreux',serviceCode:'22',start:today,end:today,hours:1,minutes:0,sectors:1,role:'ALM'};for(const [k,v] of Object.entries(values)){if(form.elements[k])form.elements[k].value=v}form.elements.end.min=form.elements.start.value;form.dataset.estimate=f?.estimate||'';$('hasFees').value=f&&(f.fee==='En attente'||f.fee==='Reçus'||f.scheme)?'yes':'no';syncTracking();$('flightMessage').textContent='';fillContexts(form,f?.refContext||'');form.dataset.override=f?.manualRegime==='yes'?'yes':'';form.querySelector('.proposal').textContent='';initialFields=readFields();$('editor').showModal()}
 form.elements.start.onchange=()=>{const {start,end}=form.elements;end.min=start.value;if(end.value<start.value)end.value=start.value};
 function readFields(){
  const fields=Object.fromEntries(new FormData(form));
  fields.stops=Array.from(stopList.querySelectorAll('input'),input=>input.value.trim()).filter(Boolean);
  for(const name of ['territory','control','paidDays','zoneIn','zoneOut'])fields[name]??='';
+ fields.manualRegime=form.dataset.override||'';
  fields.estimate=form.dataset.estimate||'';
  if($('hasFees').value==='no'){
-   fields.fee='Sans frais';fields.scheme='';fields.estimate='';
+   fields.refContext='';fields.manualRegime='';fields.fee='Sans frais';fields.scheme='';fields.estimate='';
  }
  return fields;
 }
 function mergeFlight(list,original,initial,draft){
  if(!original)return [...list,{...draft,id:crypto.randomUUID()}];
- const primeFields=['scheme','territory','control','paidDays','zoneIn','zoneOut','estimate','start','end'];
+ const primeFields=['scheme','territory','control','paidDays','zoneIn','zoneOut','estimate','manualRegime','refContext','start','end'];
  const current=list.find(f=>f.id===original.id);
  if(current && (current.scheme||draft.scheme) &&
     primeFields.some(k=>draft[k]!==initial[k]) && primeFields.some(k=>original[k]!==current[k])){
@@ -412,9 +419,10 @@ function isseEstimate(start,end,salary,births){
  }
  return salary*1.5*Math.round(days)/30+pointDays*59.0734/360;
 }
-function calculate(){
- const v=form.elements,scheme=v.scheme.value;
- try{
+function estimateFor(v){
+ const scheme=v.scheme.value;
+ if(!v.start.value||!v.end.value||v.start.value>v.end.value)throw Error('Vérifie les dates de mission.');
+ 
    const p=savedProfile();let amount;
    if(scheme==='ISAO'){
      if(!/^[0-5]$/.test(p.grade)||!['0','1'].includes(p.family)||!v.territory.value||!v.control.value||!Number.isInteger(v.paidDays.valueAsNumber)||v.paidDays.valueAsNumber<1)throw Error('Renseigne le grade et le foyer fiscal du profil, puis les conditions et jours de la mission.');
@@ -423,7 +431,11 @@ function calculate(){
      if(v.zoneIn.value<v.start.value||v.zoneOut.value>v.end.value)throw Error('Les dates de zone doivent être comprises dans la mission.');
      amount=isseEstimate(v.zoneIn.value,v.zoneOut.value,Number(p.salary),parseBirthDates(p.births));
    }
-   form.dataset.estimate=scheme+' estimée · '+amount.toLocaleString('fr-FR',{style:'currency',currency:'EUR'});
+   return scheme+' estimée · '+amount.toLocaleString('fr-FR',{style:'currency',currency:'EUR'});
+}
+function calculate(){
+ try{
+   form.dataset.estimate=estimateFor(form.elements);
    $('primeResult').textContent=form.dataset.estimate;return true;
  }catch(error){form.dataset.estimate='';$('primeResult').textContent=error.message;return false}
 }
@@ -431,6 +443,69 @@ $('calculate').onclick=calculate;
 form.addEventListener('input',e=>{
  if($('allowance').contains(e.target)||['start','end'].includes(e.target.name)){form.dataset.estimate='';showScheme()}
 });
+const ruleForm=$('refForm'),sim=$('simulation'),ruleKey=key+'.allowanceRules';
+let editRule='';
+function rules(){return JSON.parse(localStorage.getItem(ruleKey)||'[]')}
+function contextOf(r){return [r.operation,r.country,r.icao].join(' · ')}
+function fillContexts(target,value){
+ const select=target.elements.refContext;
+ const names=new Set(rules().map(contextOf));
+ if(value)names.add(value);
+ select.replaceChildren(new Option('Saisie libre',''),...Array.from(names).sort().map(name=>new Option(name,name)));
+ select.value=value;
+}
+function renderRules(){
+ const list=$('rules');list.replaceChildren();
+ for(const r of rules()){
+   const row=element('article'),edit=element('button','Modifier'),remove=element('button','Supprimer');
+   row.append(element('strong',contextOf(r)),element('p',dateText(r.since)+' → '+dateText(r.until)+' · '+r.regime),edit,remove);
+   edit.onclick=()=>{editRule=r.id;for(const [k,v] of Object.entries(r))if(ruleForm.elements[k])ruleForm.elements[k].value=v;$('cancelRule').hidden=false;ruleForm.elements.operation.focus()};
+   remove.onclick=()=>{if(confirm('Supprimer cette règle ?'))saveRules(rules().filter(item=>item.id!==r.id))};
+   list.append(row);
+ }
+ fillContexts(sim,sim.elements.refContext.value);
+ if(!$('editor').open)fillContexts(form,'');
+ refresh(sim,true);
+}
+function saveRules(next){
+ try{localStorage.setItem(ruleKey,JSON.stringify(next));ruleForm.reset();renderRules();$('refStatus').textContent='Référentiel mis à jour.'}
+ catch{$('refStatus').textContent='Impossible de sauvegarder le référentiel.'}
+}
+ruleForm.onreset=()=>{editRule='';$('cancelRule').hidden=true};
+ruleForm.onsubmit=e=>{
+ e.preventDefault();
+ const r=Object.fromEntries(new FormData(ruleForm));
+ r.icao=r.icao.toUpperCase();r.country=r.country.trim();r.operation=r.operation.trim();
+ if(!r.country||!r.operation||r.until<r.since){$('refStatus').textContent='Vérifie le pays, le nom et les dates.';return}
+ r.id=editRule||crypto.randomUUID();
+ saveRules([...rules().filter(item=>item.id!==r.id),r]);
+};
+function refresh(target,propose){
+ const v=target.elements,manual=target.dataset.override==='yes',selected=v.refContext.value;
+ const matching=selected?rules().filter(r=>contextOf(r)===selected && v.start.value && v.end.value>=v.start.value && r.since<=v.start.value && r.until>=v.end.value):[];
+ const regimes=new Set(matching.map(r=>r.regime));
+ const suggestion=regimes.size===1?[...regimes][0]:null;
+ target.querySelector('.proposal').textContent=selected?(suggestion?'Régime proposé : '+suggestion+'.':regimes.size?'Règles contradictoires. Choisis le régime manuellement.':'Aucune règle couvrant toute la mission.')+(manual?' Choix manuel actif.':''):'';
+ if(propose && selected && !manual)v.scheme.value=suggestion==='Aucun'?'':suggestion||'';
+ if(target===form){
+   showScheme();
+   if(v.scheme.value&&!v.scheme.disabled)calculate();
+ }else{
+   $('sim-isaof').hidden=v.scheme.value!=='ISAO';$('sim-issef').hidden=v.scheme.value!=='ISSE';
+   try{$('sim-primeResult').textContent=v.scheme.value?estimateFor(v):(suggestion==='Aucun'||manual?'Estimation : 0,00 €':'Choisis une opération ou un régime.')}
+   catch(error){$('sim-primeResult').textContent=error.message}
+ }
+}
+function updateProposal(target,event){
+ const name=event.target.name;
+ if(name==='refContext'){target.dataset.override='';if(!event.target.value)target.elements.scheme.value=''}
+ if(name==='scheme')target.dataset.override='yes';
+ refresh(target,['refContext','start','end'].includes(name));
+}
+sim.oninput=e=>updateProposal(sim,e);
+sim.onsubmit=e=>e.preventDefault();
+form.addEventListener('input',e=>{if($('hasFees').value==='yes' && ($('allowance').contains(e.target)||['start','end'].includes(e.target.name)))updateProposal(form,e)});
+renderRules();
 render();
 if('serviceWorker' in navigator){
  navigator.serviceWorker.register('./carnet-offline.js').then(()=>navigator.serviceWorker.ready)
