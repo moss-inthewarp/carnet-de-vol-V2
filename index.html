@@ -106,8 +106,10 @@ function render(){
  (!q.plane||q.plane===f.plane)&&(!q.mission||q.mission===f.mission)&&(!q.fee||q.fee===f.fee)&&(!q.from||f.end>=q.from)&&(!q.to||f.start<=q.to)&&Object.values(f).join(' ').toLocaleLowerCase('fr').includes(search)).sort((a,b)=>b.start.localeCompare(a.start));
  const sum=all.reduce((n,f)=>n+total(f),0);
  $('stats').replaceChildren();
- for(const [label,v] of [['Heures de vol',duration(sum)],['Vols',all.length],['Secteurs',all.reduce((n,f)=>n+Number(f.sectors),0)],['Moyenne par vol',duration(all.length?Math.floor(sum/all.length):0)],['Frais en attente',all.filter(f=>f.fee==='En attente').length]]){
- const tile=element('div');tile.className='stat';tile.append(element('small',label),element('strong',v));$('stats').append(tile)}
+ for(const [label,v] of [['Heures de vol',duration(sum)],['Vols',all.length],['Secteurs',all.reduce((n,f)=>n+Number(f.sectors),0)],['Frais en attente',all.filter(f=>f.fee==='En attente').length]]){
+ const tile=element('div');tile.className='stat';const value=element('strong',v);
+ if(label==='Frais en attente'&&v>0)value.className='pending';
+ tile.append(element('small',label),value);$('stats').append(tile)}
  $('history').replaceChildren();
  renderFleet(all);
  if((!search&&!appliedFilters)||!rows.length){
