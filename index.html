@@ -42,20 +42,18 @@ button.stat:focus-visible{outline:3px solid #1769ac;outline-offset:3px}
 <section><h2>Heures</h2>
 <div class="grid"><label>Année<select id="fleetYear"><option value="">Toutes les années</option></select></label>
 <label>Mois<select id="fleetMonth"><option value="">Tous les mois</option></select></label>
-<label>Type d’appareil<select id="fleetAircraft"><option value="">Tous les appareils</option></select></label></div><div id="fleet"></div><button id="csv">Exporter la sélection (CSV)</button></section><section><details><summary>Mon profil et mes primes</summary>
-<form id="primeProfile"><div class="grid">
-<label>Nom d’usage ou pseudo<input name="alias" maxlength="80"></label>
-<label>Grade<input name="grade" maxlength="80"></label>
-<label>Taux journalier ISSE (€)<input name="ISSE" type="number" min="0" step=".01" inputmode="decimal"></label>
-<label>Taux journalier ISAO (€)<input name="ISAO" type="number" min="0" step=".01" inputmode="decimal"></label>
-</div><button>Enregistrer mon profil</button> <span id="profileMessage" role="status"></span></form>
-<h3>Estimer une prime</h3><p>Utilise le taux applicable à ta mission et le nombre de jours indemnisables.</p>
-<form id="primeEstimate"><div class="grid"><label>Prime<select name="scheme"><option>ISSE</option><option>ISAO</option></select></label>
-<label>Jours indemnisables<input name="days" type="number" min="1" step="1" inputmode="numeric"></label></div>
-<output id="estimatedAmount" aria-live="polite"></output></form>
-<small>Profil conservé sur cet appareil. La sauvegarde des vols couvre uniquement les missions.</small>
-</details></section><section><details><summary>Sauvegarde du carnet</summary><p>Les vols sont enregistrés sur cet appareil. Exporte une copie pour les conserver ou les transférer.</p><p id="backupStatus"></p><button id="backup">Exporter les vols</button> <label>Importer une sauvegarde web<input id="restore" type="file" accept=".json,application/json"></label></details><p id="offline" role="status"></p></section></main>
-<dialog id="editor"><form id="flight"><h2>Fiche de vol</h2><datalist id="terrains"></datalist><div id="fields"></div><div class="actions"><button class="primary">Enregistrer</button><button type="button" id="cancel">Annuler</button></div></form></dialog>
+<label>Type d’appareil<select id="fleetAircraft"><option value="">Tous les appareils</option></select></label></div><div id="fleet"></div><button id="csv">Exporter la sélection (CSV)</button></section><section><details><summary>Mon profil et mes primes</summary><form id="primeProfile"><div class="grid">
+<label>Pseudo<input name="alias" maxlength="80"></label>
+<label>Catégorie de grade<select name="grade"><option value="">Choisir</option><option value="0">Officier supérieur ou général</option><option value="1">Officier subalterne ou aspirant</option><option value="2">Major, adjudant-chef ou adjudant</option><option value="3">Sergent-chef ou sergent</option><option value="4">Caporal-chef</option><option value="5">Autre militaire du rang</option></select></label>
+<label>Foyer fiscal<select name="family"><option value="">Choisir</option><option value="0">Une personne</option><option value="1">Au moins deux personnes</option></select></label>
+<label>Solde de base brute mensuelle (€)<input name="salary" type="number" min=".01" step=".01"></label></div>
+<label>Dates de naissance des enfants à charge pour la mission, une par ligne (AAAA-MM-JJ)<textarea name="births" placeholder="AAAA-MM-JJ"></textarea></label>
+<button>Enregistrer mon profil</button> <span id="profileMessage" role="status"></span></form><small>Barème aéroterrestre de l’arrêté du 17 décembre 2021. ISSE à solde mensuelle, décret n° 97-901. Pour une mission passée, renseigne la situation applicable à cette période. Profil local à cet appareil. Les estimations enregistrées figurent dans la sauvegarde des missions.</small></details></section><section><details><summary>Sauvegarde du carnet</summary><p>Les vols sont enregistrés sur cet appareil. Exporte une copie pour les conserver ou les transférer.</p><p id="backupStatus"></p><button id="backup">Exporter les vols</button> <label>Importer une sauvegarde web<input id="restore" type="file" accept=".json,application/json"></label></details><p id="offline" role="status"></p></section></main>
+<dialog id="editor"><form id="flight"><h2>Fiche de vol</h2><datalist id="terrains"></datalist><div id="fields"></div><fieldset id="allowance"><legend>Prime de mission</legend><label>Régime<select name="scheme"><option value="">Aucune prime renseignée</option><option>ISAO</option><option>ISSE</option></select></label>
+<div id="isaof"><label>Territoire<select name="territory"><option value="">Choisir</option><option value="0">Sur le territoire d’affectation</option><option value="1">Hors du territoire d’affectation</option></select></label>
+<label>Contrôle opérationnel<select name="control"><option value="">Choisir</option><option value="0">Sans contrôle opérationnel</option><option value="1">Sous contrôle opérationnel</option></select></label><label>Jours indemnisables<input name="paidDays" type="number" min="1" step="1"></label><small>Activité aéroterrestre, régime général. Vérifie le créneau complet de 23 h à 5 h.</small></div>
+<div id="issef"><label>Entrée en zone<input name="zoneIn" type="date"></label><label>Sortie de zone<input name="zoneOut" type="date"></label></div>
+<button id="calculate" type="button">Calculer avec mon profil enregistré</button> <output id="primeResult" aria-live="polite"></output></fieldset><div class="actions"><button class="primary">Enregistrer</button><button type="button" id="cancel">Annuler</button></div></form></dialog>
 <script>
 'use strict';
 const $=id=>document.getElementById(id);
@@ -206,6 +204,7 @@ function render(){
    card.append(element('p',[f.departure||'—',...(f.stops||[]),f.arrival||'—'].join(' → ')));
  }
  card.append(meta);
+ if(f.estimate)card.append(element('p',f.estimate));
  const notes = f.notes?.trim();
  if (notes) {
    const paragraph = element('p', notes);
@@ -224,16 +223,23 @@ function openFlight(f){const now=new Date();const today=new Date(now-now.getTime
   previous.dataset.legacy='';
   roleSelect.add(previous);
  }
- stopList.replaceChildren();for(const stop of f?.stops||[])appendStop(stop);const values=f||{departure:'Évreux',arrival:'Évreux',serviceCode:'22',start:today,end:today,hours:1,minutes:0,sectors:1,role:'ALM'};for(const [k,v] of Object.entries(values)){if(form.elements[k])form.elements[k].value=v}form.elements.end.min=form.elements.start.value;initialFields=readFields();$('editor').showModal()}
+ stopList.replaceChildren();for(const stop of f?.stops||[])appendStop(stop);const values=f||{departure:'Évreux',arrival:'Évreux',serviceCode:'22',start:today,end:today,hours:1,minutes:0,sectors:1,role:'ALM'};for(const [k,v] of Object.entries(values)){if(form.elements[k])form.elements[k].value=v}form.elements.end.min=form.elements.start.value;form.dataset.estimate=f?.estimate||'';showScheme();initialFields=readFields();$('editor').showModal()}
 form.elements.start.onchange=()=>{const {start,end}=form.elements;end.min=start.value;if(end.value<start.value)end.value=start.value};
 function readFields(){
  const fields=Object.fromEntries(new FormData(form));
  fields.stops=Array.from(stopList.querySelectorAll('input'),input=>input.value.trim()).filter(Boolean);
+ for(const name of ['territory','control','paidDays','zoneIn','zoneOut'])fields[name]??='';
+ fields.estimate=form.dataset.estimate||"";
  return fields;
 }
 function mergeFlight(list,original,initial,draft){
  if(!original)return [...list,{...draft,id:crypto.randomUUID()}];
+ const primeFields=['scheme','territory','control','paidDays','zoneIn','zoneOut','estimate','start','end'];
  const current=list.find(f=>f.id===original.id);
+ if(current && (current.scheme||draft.scheme) &&
+    primeFields.some(k=>draft[k]!==initial[k]) && primeFields.some(k=>original[k]!==current[k])){
+   alert('Les dates ou la prime ont changé dans un autre onglet. Rouvre la mission pour comparer.');return null;
+ }
  if(!current){alert('Cette mission a été supprimée dans un autre onglet.');return null}
  const merged={...current};
  for(const [field,value] of Object.entries(draft)){
@@ -253,6 +259,7 @@ form.onsubmit=async e=>{
  const button=form.querySelector('button.primary');
  if(button.disabled)return;
  button.disabled=true;
+ if(form.elements.scheme.value && !form.dataset.estimate && !calculate()){button.disabled=false;return}
  const original=editing,initial=initialFields,draft=readFields();
  try{if(await change(list=>mergeFlight(list,original,initial,draft)))$('editor').close()}
  finally{button.disabled=false}
@@ -331,31 +338,70 @@ $('backup').onclick=async()=>{
 };
 function valid(f){return f&&typeof f.id==='string'&&f.id.length>0&&(f.stops===undefined||(Array.isArray(f.stops)&&f.stops.every(stop=>typeof stop==="string")))&&groups.every(([,fields])=>fields.every(([k,,type,min,max])=>{const v=f[k];if(k==='serviceCode'&&(v===undefined||v===''))return true;if(typeof v!=='string')return false;if(k==='role' && ['TLM 1','TLM 2'].includes(v))return true;if(Array.isArray(type))return type.includes(v);if(type==='number')return /^\d+$/.test(v)&&Number(v)>=min&&Number(v)<=max;if(type==='date')return /^\d{4}-\d\d-\d\d$/.test(v)&&new Date(v).toISOString().slice(0,10)===v;return true}))&&f.end>=f.start}
 $('restore').onchange=async e=>{try{const data=JSON.parse(await e.target.files[0].text());if(data.version!==1||!Array.isArray(data.flights)||!data.flights.every(valid))throw Error();if(confirm('Importer '+data.flights.length+' vol(s) ? Les fiches de même identifiant seront mises à jour.'))change(list=>Array.from(new Map([...list,...data.flights].map(f=>[f.id,f])).values()))}catch{alert('Cette sauvegarde web est illisible.')}finally{e.target.value=''}};
-const profileForm=$('primeProfile'), estimateForm=$('primeEstimate');
-const profileKey=key+'.primeProfile';
-function updateEstimate(){
- const days=estimateForm.elements.days;
- const rate=profileForm.elements[estimateForm.elements.scheme.value];
- const cents=Math.round(rate.valueAsNumber*100)*days.valueAsNumber;
- $('estimatedAmount').textContent=rate.value!=='' && days.value!=='' && rate.validity.valid && days.validity.valid && Number.isSafeInteger(cents)
-   ? 'Estimation : '+(cents/100).toLocaleString('fr-FR',{style:'currency',currency:'EUR'})
-   : 'Renseigne le taux journalier et le nombre de jours.';
-}
+const profileForm=$('primeProfile'),profileKey=key+'.primeProfile';
+const rates=[[78,97,89,108,88,107,113,132],[67,82,78,93,77,92,102,117],[56,68,67,79,66,78,91,103],[49,59,60,70,59,69,84,94],[47,57,58,68,57,67,82,92],[39,48,50,59,49,58,74,83]];
+function savedProfile(){return JSON.parse(localStorage.getItem(profileKey)||'{}')||{}}
 try{
- const profile=JSON.parse(localStorage.getItem(profileKey)||'{}');
- for(const field of ['alias','grade','ISSE','ISAO'])profileForm.elements[field].value=profile[field]??'';
+ const p=savedProfile();
+ for(const name of ['alias','grade','family','salary','births'])profileForm.elements[name].value=p[name]??'';
 }catch{$('profileMessage').textContent='Lecture du profil impossible.'}
-profileForm.onsubmit=event=>{
- event.preventDefault();
- try{
-   localStorage.setItem(profileKey,JSON.stringify(Object.fromEntries(new FormData(profileForm))));
-   $('profileMessage').textContent='Profil enregistré.';
- }catch{$('profileMessage').textContent='Enregistrement impossible sur cet appareil.'}
+function children(text){
+ const dates=(text||'').trim().split(/\s+/).filter(Boolean);
+ for(const date of dates){
+   if(!/^\d{4}-\d\d-\d\d$/.test(date)||!Number.isFinite(Date.parse(date))||new Date(date).toISOString().slice(0,10)!==date)throw Error('Vérifie les dates de naissance (AAAA-MM-JJ).');
+ }
+ return dates;
+}
+profileForm.onsubmit=e=>{
+ e.preventDefault();
+ try{const p=Object.fromEntries(new FormData(profileForm));children(p.births);localStorage.setItem(profileKey,JSON.stringify(p));$('profileMessage').textContent='Profil enregistré.'}
+ catch(error){$('profileMessage').textContent=error.message}
 };
-profileForm.oninput=()=>{$('profileMessage').textContent='Modifications à enregistrer.';updateEstimate()};
-estimateForm.oninput=updateEstimate;
-estimateForm.onsubmit=event=>event.preventDefault();
-updateEstimate();
+function showScheme(){
+ const scheme=form.elements.scheme.value;
+ for(const [id,active] of [['isaof',scheme==='ISAO'],['issef',scheme==='ISSE']]){
+   $(id).hidden=!active;
+   for(const control of $(id).querySelectorAll('input,select'))control.disabled=!active;
+ }
+ $('calculate').hidden=!scheme;
+ $('primeResult').textContent=form.dataset.estimate||'';
+}
+function isseEstimate(start,end,salary,births){
+ if(!start||!end||end<start||start<'2023-07-01'||!(salary>0))throw Error('Vérifie la solde enregistrée et les dates de zone (depuis juillet 2023).');
+ let days=0,pointDays=0;
+ const last=new Date(end);
+ for(let d=new Date(start);d<=last;d.setUTCDate(d.getUTCDate()+1)){
+   const iso=d.toISOString().slice(0,10);
+   const monthEnd=new Date(Date.UTC(d.getUTCFullYear(),d.getUTCMonth()+1,0));
+   const fullMonth=start<=iso.slice(0,7)+'-01' && last>=monthEnd;
+   days+=fullMonth?30/monthEnd.getUTCDate():1;
+   for(const birth of births){
+     if(birth>iso)continue;
+     const age=Number(iso.slice(0,4))-Number(birth.slice(0,4))-(iso.slice(5)<birth.slice(5));
+     pointDays+=age<10?30:age<16?40:50;
+   }
+ }
+ return salary*1.5*Math.round(days)/30+pointDays*59.0734/360;
+}
+function calculate(){
+ const v=form.elements,scheme=v.scheme.value;
+ try{
+   const p=savedProfile();let amount;
+   if(scheme==='ISAO'){
+     if(!/^[0-5]$/.test(p.grade)||!['0','1'].includes(p.family)||!v.territory.value||!v.control.value||!Number.isInteger(v.paidDays.valueAsNumber)||v.paidDays.valueAsNumber<1)throw Error('Renseigne le grade et le foyer fiscal du profil, puis les conditions et jours de la mission.');
+     amount=rates[p.grade][4*Number(v.territory.value)+2*Number(v.control.value)+Number(p.family)]*v.paidDays.valueAsNumber;
+   }else{
+     if(v.zoneIn.value<v.start.value||v.zoneOut.value>v.end.value)throw Error('Les dates de zone doivent être comprises dans la mission.');
+     amount=isseEstimate(v.zoneIn.value,v.zoneOut.value,Number(p.salary),children(p.births));
+   }
+   form.dataset.estimate=scheme+' estimée · '+amount.toLocaleString('fr-FR',{style:'currency',currency:'EUR'});
+   $('primeResult').textContent=form.dataset.estimate;return true;
+ }catch(error){form.dataset.estimate='';$('primeResult').textContent=error.message;return false}
+}
+$('calculate').onclick=calculate;
+form.addEventListener('input',e=>{
+ if($('allowance').contains(e.target)||['start','end'].includes(e.target.name)){form.dataset.estimate='';showScheme()}
+});
 render();
 if('serviceWorker' in navigator){
  navigator.serviceWorker.register('./carnet-offline.js').then(()=>navigator.serviceWorker.ready)
