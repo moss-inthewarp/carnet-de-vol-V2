@@ -11,7 +11,7 @@ article.flight-card{background:white;border-radius:14px;border-left:4px solid #1
 .receive{background:#ddf4e5;border:0;color:#216637;border-radius:30px;font-weight:650}
 .route-fields{display:grid;gap:.25rem}.stop-row label{flex:1;min-width:0}
 </style><header><small>C-130J &nbsp; / &nbsp; JOURNAL PERSONNEL</small><h1>Carnet de vol</h1><button class="primary" id="add">＋ Ajouter un vol</button></header><main>
-<h2>Bilan des vols</h2><div class="grid stats" id="stats"></div><section><h2>Historique des vols</h2><form id="filters"><label>Rechercher<input type="search" name="search" placeholder="Lieu, équipage, numéro de mission…"></label><details><summary>Filtres</summary><div class="grid" id="filterFields"></div><button type="reset">Réinitialiser les filtres</button></details></form><div id="history"></div></section>
+<h2>Bilan des vols</h2><div class="grid stats" id="stats"></div><section><h2>Historique des vols</h2><form id="filters"><label>Rechercher<input type="search" name="search" placeholder="Lieu, équipage, numéro de mission…"></label><details><summary>Filtres</summary><div class="grid" id="filterFields"></div><button class="primary" type="submit">Appliquer les filtres</button> <button type="reset">Réinitialiser les filtres</button></details></form><div id="history"></div></section>
 <section><h2>Heures</h2>
 <div class="grid"><label>Année<select id="fleetYear"><option value="">Toutes les années</option></select></label>
 <label>Mois<select id="fleetMonth"><option value="">Tous les mois</option></select></label>
@@ -98,20 +98,21 @@ function feeRow(f){
  }
  return row;
 }
+let appliedFilters=null;
 function render(){
  let all;try{all=records()}catch{$('history').textContent='Le stockage du carnet est inaccessible.';return}
- const q=Object.fromEntries(new FormData(filters));const search=q.search.trim().toLocaleLowerCase('fr');
+ const q=appliedFilters||{};const search=filters.elements.search.value.trim().toLocaleLowerCase('fr');
  const rows=all.filter(f=>
  (!q.plane||q.plane===f.plane)&&(!q.mission||q.mission===f.mission)&&(!q.fee||q.fee===f.fee)&&(!q.from||f.end>=q.from)&&(!q.to||f.start<=q.to)&&Object.values(f).join(' ').toLocaleLowerCase('fr').includes(search)).sort((a,b)=>b.start.localeCompare(a.start));
- const sum=rows.reduce((n,f)=>n+total(f),0);
+ const sum=all.reduce((n,f)=>n+total(f),0);
  $('stats').replaceChildren();
- for(const [label,v] of [['Heures de vol',duration(sum)],['Vols',rows.length],['Secteurs',rows.reduce((n,f)=>n+Number(f.sectors),0)],['Moyenne par vol',duration(rows.length?Math.floor(sum/rows.length):0)],['Frais en attente',rows.filter(f=>f.fee==='En attente').length]]){
+ for(const [label,v] of [['Heures de vol',duration(sum)],['Vols',all.length],['Secteurs',all.reduce((n,f)=>n+Number(f.sectors),0)],['Moyenne par vol',duration(all.length?Math.floor(sum/all.length):0)],['Frais en attente',all.filter(f=>f.fee==='En attente').length]]){
  const tile=element('div');tile.className='stat';tile.append(element('small',label),element('strong',v));$('stats').append(tile)}
  $('history').replaceChildren();
  renderFleet(all);
- if(!search||!rows.length){
+ if((!search&&!appliedFilters)||!rows.length){
    const message=!all.length?'Ton carnet est vide. Ajoute ton premier vol pour commencer.':
-     search?'Aucun vol ne correspond à ta recherche.':'Saisis une recherche pour afficher tes vols.';
+     (search||appliedFilters)?'Aucun vol ne correspond à cette sélection.':'Saisis une recherche ou applique les filtres pour afficher tes vols.';
    const hint=element('p',message);
    hint.className='empty';
    $('history').append(hint);
@@ -135,7 +136,13 @@ function render(){
 function openFlight(f){const now=new Date();const today=new Date(now-now.getTimezoneOffset()*60000).toISOString().slice(0,10);editing=f?.id||null;form.reset();stopList.replaceChildren();for(const stop of f?.stops||[])appendStop(stop);const values=f||{start:today,end:today,hours:1,minutes:0,sectors:1,role:'ALM'};for(const [k,v] of Object.entries(values)){if(form.elements[k])form.elements[k].value=v}form.elements.end.min=form.elements.start.value;$('editor').showModal()}
 form.elements.start.onchange=()=>{const {start,end}=form.elements;end.min=start.value;if(end.value<start.value)end.value=start.value};
 form.onsubmit=e=>{e.preventDefault();const f=Object.fromEntries(new FormData(form));f.stops=Array.from(stopList.querySelectorAll("input"),input=>input.value.trim()).filter(Boolean);f.id=editing||crypto.randomUUID();if(change(list=>[...list.filter(x=>x.id!==f.id),{...list.find(x=>x.id===f.id),...f}]))$('editor').close()};
-$('add').onclick=()=>openFlight();$('cancel').onclick=()=>$('editor').close();filters.oninput=render;filters.onreset=()=>setTimeout(render);window.addEventListener('storage',render);
+$('add').onclick=()=>openFlight();$('cancel').onclick=()=>$('editor').close();filters.elements.search.oninput=render;
+filters.onsubmit=e=>{
+ e.preventDefault();
+ appliedFilters=Object.fromEntries(new FormData(filters));
+ render();
+};
+filters.onreset=()=>{appliedFilters=null;setTimeout(render)};window.addEventListener('storage',render);
 $('backup').onclick=()=>{const url=URL.createObjectURL(new Blob([JSON.stringify({version:1,flights:records()},null,2)],{type:'application/json'}));const a=element('a');a.href=url;a.download='carnet-de-vol.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),3000)};
 function valid(f){return f&&typeof f.id==='string'&&f.id.length>0&&(f.stops===undefined||(Array.isArray(f.stops)&&f.stops.every(stop=>typeof stop==="string")))&&groups.every(([,fields])=>fields.every(([k,,type,min,max])=>{const v=f[k];if(typeof v!=='string')return false;if(Array.isArray(type))return type.includes(v);if(type==='number')return /^\d+$/.test(v)&&Number(v)>=min&&Number(v)<=max;if(type==='date')return /^\d{4}-\d\d-\d\d$/.test(v)&&new Date(v).toISOString().slice(0,10)===v;return true}))&&f.end>=f.start}
 $('restore').onchange=async e=>{try{const data=JSON.parse(await e.target.files[0].text());if(data.version!==1||!Array.isArray(data.flights)||!data.flights.every(valid))throw Error();if(confirm('Importer '+data.flights.length+' vol(s) ? Les fiches de même identifiant seront mises à jour.'))change(list=>Array.from(new Map([...list,...data.flights].map(f=>[f.id,f])).values()))}catch{alert('Cette sauvegarde web est illisible.')}finally{e.target.value=''}};
