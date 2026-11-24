@@ -70,28 +70,19 @@ months.forEach((name,i)=>monthSelect.add(new Option(name,String(i+1).padStart(2,
 const aircraftSelect=$('fleetAircraft');
 for(const plane of aircraft)aircraftSelect.add(new Option(plane,plane));
 yearSelect.onchange=monthSelect.onchange=aircraftSelect.onchange=render;
-function renderFleet(rows,all){
+function renderFleet(all){
  const previousYear=yearSelect.value;
  const years=[...new Set(all.map(f=>f.start.slice(0,4)))].sort().reverse();
  yearSelect.replaceChildren(new Option('Toutes les années',''),...years.map(year=>new Option(year,year)));
  if(years.includes(previousYear))yearSelect.value=previousYear;
- const selected=rows.filter(f=>(!yearSelect.value||f.start.slice(0,4)===yearSelect.value)&&
+ const selected=all.filter(f=>(!yearSelect.value||f.start.slice(0,4)===yearSelect.value)&&
    (!monthSelect.value||f.start.slice(5,7)===monthSelect.value)&&
    (!aircraftSelect.value||f.plane===aircraftSelect.value));
  const fleet=$('fleet');
  fleet.replaceChildren();
- if(!selected.length){fleet.textContent='Aucun vol pour cette sélection.';return}
- const sum=selected.reduce((n,f)=>n+total(f),0);
- for(const plane of aircraft){
-   const flights=selected.filter(f=>f.plane===plane);
-   if(!flights.length)continue;
-   const minutes=flights.reduce((n,f)=>n+total(f),0);
-   const bar=element('progress');
-   bar.max=sum||1;
-   bar.value=minutes;
-   bar.setAttribute('aria-label',plane);
-   fleet.append(element('p',plane+' · '+duration(minutes)),bar);
- }
+ const minutes=selected.reduce((n,f)=>n+total(f),0);
+ const label=aircraftSelect.value||'Tous les appareils';
+ fleet.append(element('p',label),element('strong',duration(minutes)));
 }
 function feeRow(f){
  const row=element('div');row.className='fee-row';
@@ -109,15 +100,23 @@ function feeRow(f){
 }
 function render(){
  let all;try{all=records()}catch{$('history').textContent='Le stockage du carnet est inaccessible.';return}
- const q=Object.fromEntries(new FormData(filters));const rows=all.filter(f=>
- (!q.plane||q.plane===f.plane)&&(!q.mission||q.mission===f.mission)&&(!q.fee||q.fee===f.fee)&&(!q.from||f.end>=q.from)&&(!q.to||f.start<=q.to)&&Object.values(f).join(' ').toLocaleLowerCase('fr').includes(q.search.trim().toLocaleLowerCase('fr'))).sort((a,b)=>b.start.localeCompare(a.start));
+ const q=Object.fromEntries(new FormData(filters));const search=q.search.trim().toLocaleLowerCase('fr');
+ const rows=all.filter(f=>
+ (!q.plane||q.plane===f.plane)&&(!q.mission||q.mission===f.mission)&&(!q.fee||q.fee===f.fee)&&(!q.from||f.end>=q.from)&&(!q.to||f.start<=q.to)&&Object.values(f).join(' ').toLocaleLowerCase('fr').includes(search)).sort((a,b)=>b.start.localeCompare(a.start));
  const sum=rows.reduce((n,f)=>n+total(f),0);
  $('stats').replaceChildren();
  for(const [label,v] of [['Heures de vol',duration(sum)],['Vols',rows.length],['Secteurs',rows.reduce((n,f)=>n+Number(f.sectors),0)],['Moyenne par vol',duration(rows.length?Math.floor(sum/rows.length):0)],['Frais en attente',rows.filter(f=>f.fee==='En attente').length]]){
  const tile=element('div');tile.className='stat';tile.append(element('small',label),element('strong',v));$('stats').append(tile)}
  $('history').replaceChildren();
- if(!rows.length){const msg=element('p',all.length?'Aucun vol ne correspond à ces filtres.':'Ton carnet est vide. Ajoute ton premier vol pour commencer.');msg.className='empty';$('history').append(msg)}
- renderFleet(rows,all);
+ renderFleet(all);
+ if(!search||!rows.length){
+   const message=!all.length?'Ton carnet est vide. Ajoute ton premier vol pour commencer.':
+     search?'Aucun vol ne correspond à ta recherche.':'Saisis une recherche pour afficher tes vols.';
+   const hint=element('p',message);
+   hint.className='empty';
+   $('history').append(hint);
+   return;
+ }
  for(const f of rows){
  const card=element('article');card.className='flight-card';
  const head=element('div');head.className='flight-head';
