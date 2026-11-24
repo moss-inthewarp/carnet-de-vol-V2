@@ -8,14 +8,19 @@
  background-position:center,right 42%;
  background-size:cover,max(72%,560px) auto;
  color:#f8f8ec;padding:2.4rem max(5vw,calc((100% - 1050px)/2)) 2rem;border-bottom:5px solid #f0b76b}header small{font:600 .78rem monospace;letter-spacing:.14em;color:#b9d5cd}h1{font-size:clamp(2.4rem,7vw,4.2rem);line-height:1;margin:.55rem 0 1.45rem;letter-spacing:-.05em}main{max-width:1090px;margin:auto;padding:1.5rem 20px 4rem}h2{font-size:1.35rem;margin:0 0 .8rem}button,summary{cursor:pointer}button,input,select,textarea{font:inherit;color:inherit}button{background:#fff;border:1px solid #bdcbc5;border-radius:8px;padding:.55rem .9rem;min-height:44px}.primary{background:#ffd197;border:0;color:#263a34;font-weight:700}section,article,dialog{border:1px solid #d4ded6;border-radius:14px;background:#fff;padding:1.1rem;margin-bottom:1rem}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,145px),1fr));gap:.8rem}.stats{margin-bottom:1.3rem}.stat{background:#fff;border-bottom:3px solid #6f9991;padding:.85rem;border-radius:9px}.stat strong{display:block;font:600 1.9rem monospace;margin-top:.25rem}.stat small,label{font-weight:600}input,select,textarea{display:block;width:100%;min-width:0;padding:.55rem;border:1px solid #b9c9c3;border-radius:6px;background:white;margin:.25rem 0 .65rem}summary{padding:.6rem 0;font-weight:650}dialog{margin:auto;width:min(580px,95vw);max-height:90dvh;overflow:auto}dialog::backdrop{background:#132d32aa}fieldset{border:0;border-top:1px solid #d5ded9;padding:1rem 0 .4rem;margin:0}legend{font-weight:750}article{border-radius:8px;background:#f8faf6;margin:.7rem 0 0}article strong{font-size:1.15rem}p{margin:.5rem 0 .8rem}progress{accent-color:#34766b;width:min(100%,320px)}.actions{display:flex;gap:.6rem;flex-wrap:wrap}.empty{padding:1.2rem 0;text-align:center;color:#526a64}.warn{color:#923e32}label{font-size:.9rem}textarea{resize:vertical}
-article.flight-card{background:white;border-radius:14px;border-left:4px solid #147bd1;padding:1rem 1.15rem;overflow-wrap:anywhere}
-.flight-head,.fee-row,.stop-row{display:flex;align-items:center;gap:.6rem}
-.flight-head,.fee-row{justify-content:space-between;flex-wrap:wrap}
+article.flight-card{margin:0;padding:.65rem 0;border:0;border-radius:0;border-top:1px solid #d4ded6;background:transparent;line-height:1.32;overflow-wrap:anywhere}
+.flight-card p{margin:.15rem 0 0}
+.flight-head,.flight-footer,.fee-row,.stop-row{display:flex;align-items:center;gap:.4rem;flex-wrap:wrap}
+.flight-head,.flight-footer{justify-content:space-between}
+.flight-head strong{font-size:.98rem}
 .flight-time{color:#1769ac;font-weight:750;font-variant-numeric:tabular-nums}
-.flight-card .actions button{min-height:32px;padding:.2rem .6rem;font-size:.85rem}
+.flight-meta,.flight-notes{font-size:.87rem;color:#526164}
 .flight-notes{white-space:pre-wrap}
-.flight-notes b{display:block;font-size:.85rem}
-.flight-meta{color:#526164}.fee-row{margin:.75rem 0;font-weight:650}
+.flight-footer{margin-top:.3rem}
+.flight-card .actions{gap:.3rem}
+.flight-card button{min-height:30px;padding:.15rem .55rem;font-size:.81rem}
+.fee-row{font-size:.82rem;font-weight:600}
+.stop-row{flex-wrap:nowrap}
 .pending{color:#995000}.received{color:#237246}.no-fee{color:#596363}
 .receive{background:#ddf4e5;border:0;color:#216637;border-radius:30px;font-weight:650}
 .route-fields{display:grid;gap:.25rem}.stop-row label{flex:1;min-width:0}
@@ -142,21 +147,22 @@ function render(){
  const dates=dateText(f.start)+(f.end===f.start?'':' → '+dateText(f.end));
  const time=element('span',String(f.hours).padStart(2,'0')+':'+String(f.minutes).padStart(2,'0'));
  time.className='flight-time';head.append(element('strong',dates),time);
- const meta=element('p',[f.plane,f.mission,f.number&&'N° '+f.number].filter(Boolean).join(' · '));
+ const meta=element('p',[f.plane,f.mission,f.number&&'N° '+f.number,f.role,f.sectors+' secteur'+(Number(f.sectors)>1?'s':'')].filter(Boolean).join(' · '));
  meta.className='flight-meta';
- card.append(head,meta,element('p',f.role+' · '+f.sectors+' secteur(s)'));
+ card.append(head);
  if(f.departure||f.arrival||f.stops?.length){
    card.append(element('p',[f.departure||'—',...(f.stops||[]),f.arrival||'—'].join(' → ')));
  }
+ card.append(meta);
  const notes = f.notes?.trim();
  if (notes) {
    const paragraph = element('p', notes);
    paragraph.className = 'flight-notes';
-   paragraph.prepend(element('b', 'Remarques'));
+   paragraph.prepend(element('b', 'Remarques · '));
    card.append(paragraph);
  }
- card.append(feeRow(f));
- const edit=element('button','Modifier'),del=element('button','Supprimer');del.className='warn';edit.onclick=()=>openFlight(f);del.onclick=()=>{if(confirm('Supprimer ce vol du carnet ?'))change(list=>list.filter(x=>x.id!==f.id))};const buttons=element('div');buttons.className='actions';buttons.append(edit,del);card.append(buttons);$('history').append(card)}
+ const footer=element('div');footer.className='flight-footer';footer.append(feeRow(f));
+ const edit=element('button','Modifier'),del=element('button','Supprimer');del.className='warn';edit.onclick=()=>openFlight(f);del.onclick=()=>{if(confirm('Supprimer ce vol du carnet ?'))change(list=>list.filter(x=>x.id!==f.id))};const buttons=element('div');buttons.className='actions';buttons.append(edit,del);footer.append(buttons);card.append(footer);$('history').append(card)}
 }
 function openFlight(f){const now=new Date();const today=new Date(now-now.getTimezoneOffset()*60000).toISOString().slice(0,10);editing=f?.id||null;form.reset();
  const roleSelect=form.elements.role;
