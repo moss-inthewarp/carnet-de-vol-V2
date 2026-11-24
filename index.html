@@ -51,7 +51,7 @@ const groups=[
  ['Suivi',[['fee','Frais de mission',fees],['notes','Remarques','textarea']]]];
 const key='carnet.vol.v2.'+location.pathname.replace(/index\.html$/,'');
 const form=$('flight'),filters=$('filters');
-let editing=null;
+let editing=null, initialFields=null;
 function element(tag,txt){const node=document.createElement(tag);if(txt!==undefined)node.textContent=txt;return node}
 function field(parent,[name,title,type,min,max],optional=false){
  const label=element('label',title);const select=Array.isArray(type);
@@ -83,7 +83,19 @@ for(const [title,fields] of groups){const box=element('fieldset'),grid=element('
  $('fields').append(box)}
 for(const f of [['plane','Appareil',['',...aircraft]],['mission','Mission',['',...missions]],['fee','Frais',['',...fees]],['from','Du','date'],['to','Au','date']])field($('filterFields'),f,true);
 function records(){const data=JSON.parse(localStorage.getItem(key)||'[]');if(!Array.isArray(data))throw Error();return data}
-function change(update){try{localStorage.setItem(key,JSON.stringify(update(records())));render();return true}catch{alert('Écriture impossible. Vérifie le stockage disponible.');return false}}
+async function change(update){
+ function write(){
+   const next=update(records());
+   if(!next)return false;
+   localStorage.setItem(key,JSON.stringify(next));
+   return true;
+ }
+ let written;
+ try{written=navigator.locks ? await navigator.locks.request(key,write) : write()}
+ catch{alert('Écriture impossible. Vérifie le stockage disponible.');return false}
+ if(written)render();
+ return written;
+}
 function dateText(s){return s.split('-').reverse().join('/')}
 function duration(m){return Math.floor(m/60)+' h '+String(m%60).padStart(2,'0')}
 function total(f){return Number(f.hours)*60+Number(f.minutes)}
@@ -182,7 +194,7 @@ function render(){
  const footer=element('div');footer.className='flight-footer';footer.append(feeRow(f));
  const edit=element('button','Modifier'),del=element('button','Supprimer');del.className='warn';edit.onclick=()=>openFlight(f);del.onclick=()=>{if(confirm('Supprimer ce vol du carnet ?'))change(list=>list.filter(x=>x.id!==f.id))};const buttons=element('div');buttons.className='actions';buttons.append(edit,del);footer.append(buttons);card.append(footer);$('history').append(card)}
 }
-function openFlight(f){const now=new Date();const today=new Date(now-now.getTimezoneOffset()*60000).toISOString().slice(0,10);editing=f?.id||null;form.reset();
+function openFlight(f){const now=new Date();const today=new Date(now-now.getTimezoneOffset()*60000).toISOString().slice(0,10);editing=f||null;form.reset();
  const roleSelect=form.elements.role;
  roleSelect.querySelector('[data-legacy]')?.remove();
  if(f?.role && !roles.includes(f.role)){
@@ -190,9 +202,39 @@ function openFlight(f){const now=new Date();const today=new Date(now-now.getTime
   previous.dataset.legacy='';
   roleSelect.add(previous);
  }
- stopList.replaceChildren();for(const stop of f?.stops||[])appendStop(stop);const values=f||{departure:'Évreux',arrival:'Évreux',serviceCode:'22',start:today,end:today,hours:1,minutes:0,sectors:1,role:'ALM'};for(const [k,v] of Object.entries(values)){if(form.elements[k])form.elements[k].value=v}form.elements.end.min=form.elements.start.value;$('editor').showModal()}
+ stopList.replaceChildren();for(const stop of f?.stops||[])appendStop(stop);const values=f||{departure:'Évreux',arrival:'Évreux',serviceCode:'22',start:today,end:today,hours:1,minutes:0,sectors:1,role:'ALM'};for(const [k,v] of Object.entries(values)){if(form.elements[k])form.elements[k].value=v}form.elements.end.min=form.elements.start.value;initialFields=readFields();$('editor').showModal()}
 form.elements.start.onchange=()=>{const {start,end}=form.elements;end.min=start.value;if(end.value<start.value)end.value=start.value};
-form.onsubmit=e=>{e.preventDefault();const f=Object.fromEntries(new FormData(form));f.stops=Array.from(stopList.querySelectorAll("input"),input=>input.value.trim()).filter(Boolean);f.id=editing||crypto.randomUUID();if(change(list=>[...list.filter(x=>x.id!==f.id),{...list.find(x=>x.id===f.id),...f}]))$('editor').close()};
+function readFields(){
+ const fields=Object.fromEntries(new FormData(form));
+ fields.stops=Array.from(stopList.querySelectorAll('input'),input=>input.value.trim()).filter(Boolean);
+ return fields;
+}
+function mergeFlight(list,original,initial,draft){
+ if(!original)return [...list,{...draft,id:crypto.randomUUID()}];
+ const current=list.find(f=>f.id===original.id);
+ if(!current){alert('Cette mission a été supprimée dans un autre onglet.');return null}
+ const merged={...current};
+ for(const [field,value] of Object.entries(draft)){
+   const same=(a,b)=>JSON.stringify(a)===JSON.stringify(b);
+   if(same(initial[field],value))continue;
+   if(!same(original[field],current[field])&&!same(current[field],value)){
+     alert('Le même champ a été modifié dans un autre onglet. Copie ta saisie puis rouvre la mission pour comparer.');
+     return null;
+   }
+   merged[field]=value;
+ }
+ if(merged.end<merged.start){alert('Les dates ont changé. Rouvre la mission pour les vérifier.');return null}
+ return list.map(f=>f.id===original.id?merged:f);
+}
+form.onsubmit=async e=>{
+ e.preventDefault();
+ const button=form.querySelector('button.primary');
+ if(button.disabled)return;
+ button.disabled=true;
+ const original=editing,initial=initialFields,draft=readFields();
+ try{if(await change(list=>mergeFlight(list,original,initial,draft)))$('editor').close()}
+ finally{button.disabled=false}
+};
 $('add').onclick=()=>openFlight();$('cancel').onclick=()=>$('editor').close();filters.elements.search.oninput=render;
 filters.onsubmit=e=>{
  e.preventDefault();
@@ -231,21 +273,38 @@ $('csv').onclick=()=>{
  download(new Blob(['\uFEFF',csv],{type:'text/csv;charset=utf-8'}),['vols',yearSelect.value,monthSelect.value,aircraftSelect.value].filter(Boolean).join('-')+'.csv');
 };
 const backupKey=key+'.lastBackup';
-function renderBackup(all){
+async function fingerprint(flight){
+ const ordered=Object.keys(flight).sort().map(field=>[field,flight[field]]);
+ const bytes=new TextEncoder().encode(JSON.stringify(ordered));
+ const hash=await crypto.subtle.digest('SHA-256',bytes);
+ return Array.from(new Uint8Array(hash),byte=>byte.toString(16).padStart(2,'0')).join('');
+}
+let backupRender=0;
+async function renderBackup(all){
+ const generation=++backupRender;
  const status=$('backupStatus');
  let saved;
  try{saved=JSON.parse(localStorage.getItem(backupKey))}catch{}
  if(!saved||!Array.isArray(saved.ids)){status.textContent='Aucune sauvegarde datée sur cet appareil.';return}
  const ids=new Set(saved.ids);
- const count=all.filter(f=>!ids.has(f.id)).length;
- status.textContent='Dernier export JSON le '+new Date(saved.date).toLocaleString('fr-FR')+' · '+count+' nouvelle'+(count>1?'s':'')+' mission'+(count>1?'s':'')+' depuis cet export.';
+ const added=all.filter(f=>!ids.has(f.id)).length;
+ const remaining=new Set(all.map(f=>f.id));
+ const deleted=saved.ids.filter(id=>!remaining.has(id)).length;
+ const parts=[added+' ajoutée(s)',deleted+' supprimée(s)'];
+ if(Array.isArray(saved.hashes)){
+   const hashes=new Map(saved.hashes);
+   const matches=await Promise.all(all.filter(f=>ids.has(f.id)).map(async f=>hashes.get(f.id)!==await fingerprint(f)));
+   parts.splice(1,0,matches.filter(Boolean).length+' modifiée(s)');
+ }else parts.push('suivi des modifications disponible après le prochain export');
+ if(generation===backupRender)status.textContent='Dernier export JSON le '+new Date(saved.date).toLocaleString('fr-FR')+' · Missions : '+parts.join(', ')+'.';
 }
-$('backup').onclick=()=>{
+$('backup').onclick=async()=>{
  const flights=records();
  download(new Blob([JSON.stringify({version:1,flights},null,2)],{type:'application/json'}),'carnet-de-vol.json');
  try{
-   localStorage.setItem(backupKey,JSON.stringify({date:new Date().toISOString(),ids:flights.map(f=>f.id)}));
-   renderBackup(flights);
+   const hashes=await Promise.all(flights.map(async f=>[f.id,await fingerprint(f)]));
+   localStorage.setItem(backupKey,JSON.stringify({date:new Date().toISOString(),ids:flights.map(f=>f.id),hashes}));
+   await renderBackup(records());
  }catch{alert('Export lancé. La date de sauvegarde n’a pas pu être mémorisée.')}
 };
 function valid(f){return f&&typeof f.id==='string'&&f.id.length>0&&(f.stops===undefined||(Array.isArray(f.stops)&&f.stops.every(stop=>typeof stop==="string")))&&groups.every(([,fields])=>fields.every(([k,,type,min,max])=>{const v=f[k];if(k==='serviceCode'&&(v===undefined||v===''))return true;if(typeof v!=='string')return false;if(k==='role' && ['TLM 1','TLM 2'].includes(v))return true;if(Array.isArray(type))return type.includes(v);if(type==='number')return /^\d+$/.test(v)&&Number(v)>=min&&Number(v)<=max;if(type==='date')return /^\d{4}-\d\d-\d\d$/.test(v)&&new Date(v).toISOString().slice(0,10)===v;return true}))&&f.end>=f.start}

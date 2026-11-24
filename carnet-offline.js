@@ -4,7 +4,7 @@ const banner=new URL('c130j-bandeau.jpg',self.registration.scope).href;
 self.addEventListener('install',event=>{
  event.waitUntil((async()=>{
    const cache=await caches.open(cacheName);
-   await cache.addAll([page,banner]);
+   await cache.add(new Request(page,{cache:'reload'}));
    await self.skipWaiting();
  })());
 });
@@ -19,7 +19,10 @@ self.addEventListener('fetch',event=>{
    const cache=await caches.open(cacheName), key=isPage?page:banner;
    try{
      const response=await fetch(request);
-     if(response.ok){await cache.put(key,response.clone());return response}
+     if(response.ok){
+       try{await cache.put(key,response.clone())}catch{/* Le réseau reste utilisable si le cache est plein. */}
+       return response;
+     }
      return (await cache.match(key))||response;
    }catch(error){
      const cached=await cache.match(key);
