@@ -2,6 +2,14 @@
 <html lang="fr"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#163f43"><meta name="apple-mobile-web-app-capable" content="yes"><title>Carnet de vol</title>
 <style>
 *{box-sizing:border-box}body{margin:0;background:#f3f4ee;color:#163737;font:16px/1.5 system-ui,sans-serif}header{background:#163f43;color:#f8f8ec;padding:2.4rem max(5vw,calc((100% - 1050px)/2)) 2rem;border-bottom:5px solid #f0b76b}header small{font:600 .78rem monospace;letter-spacing:.14em;color:#b9d5cd}h1{font-size:clamp(2.4rem,7vw,4.2rem);line-height:1;margin:.55rem 0 1.45rem;letter-spacing:-.05em}main{max-width:1090px;margin:auto;padding:1.5rem 20px 4rem}h2{font-size:1.35rem;margin:0 0 .8rem}button,summary{cursor:pointer}button,input,select,textarea{font:inherit;color:inherit}button{background:#fff;border:1px solid #bdcbc5;border-radius:8px;padding:.55rem .9rem;min-height:44px}.primary{background:#ffd197;border:0;color:#263a34;font-weight:700}section,article,dialog{border:1px solid #d4ded6;border-radius:14px;background:#fff;padding:1.1rem;margin-bottom:1rem}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,145px),1fr));gap:.8rem}.stats{margin-bottom:1.3rem}.stat{background:#fff;border-bottom:3px solid #6f9991;padding:.85rem;border-radius:9px}.stat strong{display:block;font:600 1.9rem monospace;margin-top:.25rem}.stat small,label{font-weight:600}input,select,textarea{display:block;width:100%;min-width:0;padding:.55rem;border:1px solid #b9c9c3;border-radius:6px;background:white;margin:.25rem 0 .65rem}summary{padding:.6rem 0;font-weight:650}dialog{margin:auto;width:min(580px,95vw);max-height:90dvh;overflow:auto}dialog::backdrop{background:#132d32aa}fieldset{border:0;border-top:1px solid #d5ded9;padding:1rem 0 .4rem;margin:0}legend{font-weight:750}article{border-radius:8px;background:#f8faf6;margin:.7rem 0 0}article strong{font-size:1.15rem}p{margin:.5rem 0 .8rem}progress{accent-color:#34766b;width:min(100%,320px)}.actions{display:flex;gap:.6rem;flex-wrap:wrap}.empty{padding:1.2rem 0;text-align:center;color:#526a64}.warn{color:#923e32}label{font-size:.9rem}textarea{resize:vertical}
+article.flight-card{background:white;border-radius:14px;border-left:4px solid #147bd1;padding:1rem 1.15rem;overflow-wrap:anywhere}
+.flight-head,.fee-row,.stop-row{display:flex;align-items:center;gap:.6rem}
+.flight-head,.fee-row{justify-content:space-between;flex-wrap:wrap}
+.flight-time{color:#1769ac;font-weight:750;font-variant-numeric:tabular-nums}
+.flight-meta{color:#526164}.fee-row{margin:.75rem 0;font-weight:650}
+.pending{color:#995000}.received{color:#237246}.no-fee{color:#596363}
+.receive{background:#ddf4e5;border:0;color:#216637;border-radius:30px;font-weight:650}
+.route-fields{display:grid;gap:.25rem}.stop-row label{flex:1;min-width:0}
 </style><header><small>C-130J &nbsp; / &nbsp; JOURNAL PERSONNEL</small><h1>Carnet de vol</h1><button class="primary" id="add">＋ Ajouter un vol</button></header><main>
 <h2>Bilan des vols</h2><div class="grid stats" id="stats"></div><section><h2>Historique des vols</h2><form id="filters"><label>Rechercher<input type="search" name="search" placeholder="Lieu, équipage, numéro de mission…"></label><details><summary>Filtres</summary><div class="grid" id="filterFields"></div><button type="reset">Réinitialiser les filtres</button></details></form><div id="history"></div></section>
 <section><h2>Heures par appareil</h2>
@@ -32,7 +40,23 @@ function field(parent,[name,title,type,min,max],optional=false){
  control.required=!optional&&(type==='date'||type==='number');
  label.append(control);parent.append(label)
 }
-for(const [title,fields] of groups){const box=element('fieldset'),grid=element('div');grid.className='grid';box.append(element('legend',title),grid);fields.forEach(f=>field(grid,f));$('fields').append(box)}
+const stopList=element('div');
+function appendStop(value=''){
+ const row=element('div'),label=element('label','Escale'),input=element('input');
+ const remove=element('button','Retirer');
+ row.className='stop-row';input.value=value;remove.type='button';
+ remove.setAttribute('aria-label','Retirer cette escale');
+ remove.onclick=()=>row.remove();
+ label.append(input);row.append(label,remove);stopList.append(row);
+ return input;
+}
+for(const [title,fields] of groups){const box=element('fieldset'),grid=element('div');grid.className='grid';box.append(element('legend',title),grid);if(title==='Trajet'){
+ grid.className='route-fields';field(grid,fields[0]);
+ const addStop=element('button','＋ Ajouter une escale');addStop.type='button';
+ addStop.onclick=()=>appendStop().focus();grid.append(stopList,addStop);
+ field(grid,fields[1]);
+ }else fields.forEach(f=>field(grid,f));
+ $('fields').append(box)}
 for(const f of [['plane','Appareil',['',...aircraft]],['mission','Mission',['',...missions]],['fee','Frais',['',...fees]],['from','Du','date'],['to','Au','date']])field($('filterFields'),f,true);
 function records(){const data=JSON.parse(localStorage.getItem(key)||'[]');if(!Array.isArray(data))throw Error();return data}
 function change(update){try{localStorage.setItem(key,JSON.stringify(update(records())));render();return true}catch{alert('Écriture impossible. Vérifie le stockage disponible.');return false}}
@@ -65,6 +89,20 @@ function renderFleet(rows,all){
    fleet.append(element('p',plane+' · '+duration(minutes)),bar);
  }
 }
+function feeRow(f){
+ const row=element('div');row.className='fee-row';
+ const pending=f.fee==='En attente',received=f.fee==='Reçus';
+ const label=element('span',pending?'◷  Frais en attente':received?'✓  Frais reçus':'Sans frais');
+ label.className=pending?'pending':received?'received':'no-fee';
+ row.append(label);
+ if(pending){
+   const button=element('button','Marquer reçus');
+   button.type='button';button.className='receive';
+   button.onclick=()=>change(list=>list.map(vol=>vol.id===f.id&&vol.fee==='En attente'?{...vol,fee:'Reçus'}:vol));
+   row.append(button);
+ }
+ return row;
+}
 function render(){
  let all;try{all=records()}catch{$('history').textContent='Le stockage du carnet est inaccessible.';return}
  const q=Object.fromEntries(new FormData(filters));const rows=all.filter(f=>
@@ -76,15 +114,27 @@ function render(){
  $('history').replaceChildren();
  if(!rows.length){const msg=element('p',all.length?'Aucun vol ne correspond à ces filtres.':'Ton carnet est vide. Ajoute ton premier vol pour commencer.');msg.className='empty';$('history').append(msg)}
  renderFleet(rows,all);
- for(const f of rows){const card=element('article');card.append(element('strong',(f.departure||'—')+' → '+(f.arrival||'—')),element('p',dateText(f.start)+(f.start===f.end?'':' – '+dateText(f.end))+' · '+duration(total(f))),element('p',[f.plane,f.mission,f.number&&'N° '+f.number,f.role,f.sectors+' secteur(s)',f.fee].filter(Boolean).join(' · ')));
+ for(const f of rows){
+ const card=element('article');card.className='flight-card';
+ const head=element('div');head.className='flight-head';
+ const dates=dateText(f.start)+(f.end===f.start?'':' → '+dateText(f.end));
+ const time=element('span',String(f.hours).padStart(2,'0')+':'+String(f.minutes).padStart(2,'0'));
+ time.className='flight-time';head.append(element('strong',dates),time);
+ const meta=element('p',[f.plane,f.mission,f.number&&'N° '+f.number].filter(Boolean).join(' · '));
+ meta.className='flight-meta';
+ card.append(head,meta,element('p',f.role+' · '+f.sectors+' secteur(s)'));
+ if(f.departure||f.arrival||f.stops?.length){
+   card.append(element('p',[f.departure||'—',...(f.stops||[]),f.arrival||'—'].join(' → ')));
+ }
+ card.append(feeRow(f));
  const edit=element('button','Modifier'),del=element('button','Supprimer');del.className='warn';edit.onclick=()=>openFlight(f);del.onclick=()=>{if(confirm('Supprimer ce vol du carnet ?'))change(list=>list.filter(x=>x.id!==f.id))};const buttons=element('div');buttons.className='actions';buttons.append(edit,del);card.append(buttons);$('history').append(card)}
 }
-function openFlight(f){const now=new Date();const today=new Date(now-now.getTimezoneOffset()*60000).toISOString().slice(0,10);editing=f?.id||null;form.reset();const values=f||{start:today,end:today,hours:1,minutes:0,sectors:1,role:'ALM'};for(const [k,v] of Object.entries(values)){if(form.elements[k])form.elements[k].value=v}form.elements.end.min=form.elements.start.value;$('editor').showModal()}
+function openFlight(f){const now=new Date();const today=new Date(now-now.getTimezoneOffset()*60000).toISOString().slice(0,10);editing=f?.id||null;form.reset();stopList.replaceChildren();for(const stop of f?.stops||[])appendStop(stop);const values=f||{start:today,end:today,hours:1,minutes:0,sectors:1,role:'ALM'};for(const [k,v] of Object.entries(values)){if(form.elements[k])form.elements[k].value=v}form.elements.end.min=form.elements.start.value;$('editor').showModal()}
 form.elements.start.onchange=()=>{const {start,end}=form.elements;end.min=start.value;if(end.value<start.value)end.value=start.value};
-form.onsubmit=e=>{e.preventDefault();const f=Object.fromEntries(new FormData(form));f.id=editing||crypto.randomUUID();if(change(list=>[...list.filter(x=>x.id!==f.id),{...list.find(x=>x.id===f.id),...f}]))$('editor').close()};
+form.onsubmit=e=>{e.preventDefault();const f=Object.fromEntries(new FormData(form));f.stops=Array.from(stopList.querySelectorAll("input"),input=>input.value.trim()).filter(Boolean);f.id=editing||crypto.randomUUID();if(change(list=>[...list.filter(x=>x.id!==f.id),{...list.find(x=>x.id===f.id),...f}]))$('editor').close()};
 $('add').onclick=()=>openFlight();$('cancel').onclick=()=>$('editor').close();filters.oninput=render;filters.onreset=()=>setTimeout(render);window.addEventListener('storage',render);
 $('backup').onclick=()=>{const url=URL.createObjectURL(new Blob([JSON.stringify({version:1,flights:records()},null,2)],{type:'application/json'}));const a=element('a');a.href=url;a.download='carnet-de-vol.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),3000)};
-function valid(f){return f&&typeof f.id==='string'&&f.id.length>0&&groups.every(([,fields])=>fields.every(([k,,type,min,max])=>{const v=f[k];if(typeof v!=='string')return false;if(Array.isArray(type))return type.includes(v);if(type==='number')return /^\d+$/.test(v)&&Number(v)>=min&&Number(v)<=max;if(type==='date')return /^\d{4}-\d\d-\d\d$/.test(v)&&new Date(v).toISOString().slice(0,10)===v;return true}))&&f.end>=f.start}
+function valid(f){return f&&typeof f.id==='string'&&f.id.length>0&&(f.stops===undefined||(Array.isArray(f.stops)&&f.stops.every(stop=>typeof stop==="string")))&&groups.every(([,fields])=>fields.every(([k,,type,min,max])=>{const v=f[k];if(typeof v!=='string')return false;if(Array.isArray(type))return type.includes(v);if(type==='number')return /^\d+$/.test(v)&&Number(v)>=min&&Number(v)<=max;if(type==='date')return /^\d{4}-\d\d-\d\d$/.test(v)&&new Date(v).toISOString().slice(0,10)===v;return true}))&&f.end>=f.start}
 $('restore').onchange=async e=>{try{const data=JSON.parse(await e.target.files[0].text());if(data.version!==1||!Array.isArray(data.flights)||!data.flights.every(valid))throw Error();if(confirm('Importer '+data.flights.length+' vol(s) ? Les fiches de même identifiant seront mises à jour.'))change(list=>Array.from(new Map([...list,...data.flights].map(f=>[f.id,f])).values()))}catch{alert('Cette sauvegarde web est illisible.')}finally{e.target.value=''}};
 render();
 </script></html>
