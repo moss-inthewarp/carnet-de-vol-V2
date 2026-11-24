@@ -111,7 +111,7 @@ function feeRow(f){
  label.className=pending?'pending':received?'received':'no-fee';
  row.append(label);
  if(pending){
-   const button=element('button','Marquer reçus');
+   const button=element('button','Frais reçus');
    button.type='button';button.className='receive';
    button.onclick=()=>change(list=>list.map(vol=>vol.id===f.id&&vol.fee==='En attente'?{...vol,fee:'Reçus'}:vol));
    row.append(button);
