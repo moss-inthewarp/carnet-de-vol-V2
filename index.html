@@ -32,7 +32,7 @@ article.flight-card{background:white;border-radius:14px;border-left:4px solid #1
 <script>
 'use strict';
 const $=id=>document.getElementById(id);
-const aircraft=['C130J-30','KC130J','Autre'],missions=['Entraînement','Air transport','Air drop','HAAR','JVN','MEDEVAC','Tactical Flight','Autre'],roles=['ALM-S','ALM','TLM','TLM-S','TLM 1','TLM 2'],fees=['Sans frais','En attente','Reçus'];
+const aircraft=['C130J-30','KC130J','Autre'],missions=['Entraînement','Air transport','Air drop','HAAR','JVN','MEDEVAC','Tactical Flight','Autre'],roles=['ALM-S','ALM','TLM','TLM-S','ACM','CP','PIC'],fees=['Sans frais','En attente','Reçus'];
 const groups=[
  ['Mission',[['start','Date de départ','date'],['end','Date de fin','date'],['number','Numéro de mission'],['serviceCode','Code Service Aérien',['22','10']],['plane','Appareil',aircraft],['mission','Type de mission',missions]]],
  ['Temps de vol',[['hours','Heures','number',0,99999],['minutes','Minutes','number',0,59],['sectors','Secteurs','number',0,30]]],
@@ -147,7 +147,15 @@ function render(){
  card.append(feeRow(f));
  const edit=element('button','Modifier'),del=element('button','Supprimer');del.className='warn';edit.onclick=()=>openFlight(f);del.onclick=()=>{if(confirm('Supprimer ce vol du carnet ?'))change(list=>list.filter(x=>x.id!==f.id))};const buttons=element('div');buttons.className='actions';buttons.append(edit,del);card.append(buttons);$('history').append(card)}
 }
-function openFlight(f){const now=new Date();const today=new Date(now-now.getTimezoneOffset()*60000).toISOString().slice(0,10);editing=f?.id||null;form.reset();stopList.replaceChildren();for(const stop of f?.stops||[])appendStop(stop);const values=f||{departure:'Evreux',arrival:'Evreux',serviceCode:'22',start:today,end:today,hours:1,minutes:0,sectors:1,role:'ALM'};for(const [k,v] of Object.entries(values)){if(form.elements[k])form.elements[k].value=v}form.elements.end.min=form.elements.start.value;$('editor').showModal()}
+function openFlight(f){const now=new Date();const today=new Date(now-now.getTimezoneOffset()*60000).toISOString().slice(0,10);editing=f?.id||null;form.reset();
+ const roleSelect=form.elements.role;
+ roleSelect.querySelector('[data-legacy]')?.remove();
+ if(f?.role && !roles.includes(f.role)){
+  const previous=new Option(f.role,f.role);
+  previous.dataset.legacy='';
+  roleSelect.add(previous);
+ }
+ stopList.replaceChildren();for(const stop of f?.stops||[])appendStop(stop);const values=f||{departure:'Evreux',arrival:'Evreux',serviceCode:'22',start:today,end:today,hours:1,minutes:0,sectors:1,role:'ALM'};for(const [k,v] of Object.entries(values)){if(form.elements[k])form.elements[k].value=v}form.elements.end.min=form.elements.start.value;$('editor').showModal()}
 form.elements.start.onchange=()=>{const {start,end}=form.elements;end.min=start.value;if(end.value<start.value)end.value=start.value};
 form.onsubmit=e=>{e.preventDefault();const f=Object.fromEntries(new FormData(form));f.stops=Array.from(stopList.querySelectorAll("input"),input=>input.value.trim()).filter(Boolean);f.id=editing||crypto.randomUUID();if(change(list=>[...list.filter(x=>x.id!==f.id),{...list.find(x=>x.id===f.id),...f}]))$('editor').close()};
 $('add').onclick=()=>openFlight();$('cancel').onclick=()=>$('editor').close();filters.elements.search.oninput=render;
