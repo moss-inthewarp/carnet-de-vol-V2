@@ -12,9 +12,10 @@ article.flight-card{background:white;border-radius:14px;border-left:4px solid #1
 .route-fields{display:grid;gap:.25rem}.stop-row label{flex:1;min-width:0}
 </style><header><small>C-130J &nbsp; / &nbsp; JOURNAL PERSONNEL</small><h1>Carnet de vol</h1><button class="primary" id="add">＋ Ajouter un vol</button></header><main>
 <h2>Bilan des vols</h2><div class="grid stats" id="stats"></div><section><h2>Historique des vols</h2><form id="filters"><label>Rechercher<input type="search" name="search" placeholder="Lieu, équipage, numéro de mission…"></label><details><summary>Filtres</summary><div class="grid" id="filterFields"></div><button type="reset">Réinitialiser les filtres</button></details></form><div id="history"></div></section>
-<section><h2>Heures par appareil</h2>
+<section><h2>Heures</h2>
 <div class="grid"><label>Année<select id="fleetYear"><option value="">Toutes les années</option></select></label>
-<label>Mois<select id="fleetMonth"><option value="">Tous les mois</option></select></label></div><div id="fleet"></div></section><section><details><summary>Sauvegarde du carnet</summary><p>Les vols sont enregistrés sur cet appareil. Exporte une copie pour les conserver ou les transférer.</p><button id="backup">Exporter les vols</button> <label>Importer une sauvegarde web<input id="restore" type="file" accept=".json,application/json"></label></details></section></main>
+<label>Mois<select id="fleetMonth"><option value="">Tous les mois</option></select></label>
+<label>Type d’appareil<select id="fleetAircraft"><option value="">Tous les appareils</option></select></label></div><div id="fleet"></div></section><section><details><summary>Sauvegarde du carnet</summary><p>Les vols sont enregistrés sur cet appareil. Exporte une copie pour les conserver ou les transférer.</p><button id="backup">Exporter les vols</button> <label>Importer une sauvegarde web<input id="restore" type="file" accept=".json,application/json"></label></details></section></main>
 <dialog id="editor"><form id="flight"><h2>Fiche de vol</h2><div id="fields"></div><div class="actions"><button class="primary">Enregistrer</button><button type="button" id="cancel">Annuler</button></div></form></dialog>
 <script>
 'use strict';
@@ -66,17 +67,20 @@ function total(f){return Number(f.hours)*60+Number(f.minutes)}
 const yearSelect=$('fleetYear'),monthSelect=$('fleetMonth');
 const months=['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
 months.forEach((name,i)=>monthSelect.add(new Option(name,String(i+1).padStart(2,'0'))));
-yearSelect.onchange=monthSelect.onchange=render;
+const aircraftSelect=$('fleetAircraft');
+for(const plane of aircraft)aircraftSelect.add(new Option(plane,plane));
+yearSelect.onchange=monthSelect.onchange=aircraftSelect.onchange=render;
 function renderFleet(rows,all){
  const previousYear=yearSelect.value;
  const years=[...new Set(all.map(f=>f.start.slice(0,4)))].sort().reverse();
  yearSelect.replaceChildren(new Option('Toutes les années',''),...years.map(year=>new Option(year,year)));
  if(years.includes(previousYear))yearSelect.value=previousYear;
  const selected=rows.filter(f=>(!yearSelect.value||f.start.slice(0,4)===yearSelect.value)&&
-   (!monthSelect.value||f.start.slice(5,7)===monthSelect.value));
+   (!monthSelect.value||f.start.slice(5,7)===monthSelect.value)&&
+   (!aircraftSelect.value||f.plane===aircraftSelect.value));
  const fleet=$('fleet');
  fleet.replaceChildren();
- if(!selected.length){fleet.textContent='Aucun vol sur la période sélectionnée.';return}
+ if(!selected.length){fleet.textContent='Aucun vol pour cette sélection.';return}
  const sum=selected.reduce((n,f)=>n+total(f),0);
  for(const plane of aircraft){
    const flights=selected.filter(f=>f.plane===plane);
