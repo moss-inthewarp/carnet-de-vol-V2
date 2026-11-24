@@ -37,8 +37,10 @@ button.stat:focus-visible{outline:3px solid #1769ac;outline-offset:3px}
 .stat-link{display:flex;align-items:center;justify-content:space-between;gap:.4rem;margin-top:.35rem;font-size:.85rem;font-weight:650}
 .stat-link::after{content:'→';font-size:1.1rem}
 #offline,#backupStatus{font-size:.87rem;color:#526164}
+[hidden]{display:none!important}
+#flightMessage:not(:empty),#profileMessage:not(:empty),#savedFlight:not(:empty){display:block;padding:.6rem;margin:.4rem 0;background:#edf5ef;border-radius:6px}
 </style><header><small>C-130J &nbsp; / &nbsp; JOURNAL PERSONNEL</small><h1>Carnet de vol</h1><button class="primary" id="add">＋ Ajouter un vol</button></header><main>
-<h2>Bilan des vols</h2><div class="grid stats" id="stats"></div><section><h2>Historique des vols</h2><form id="filters"><label>Rechercher<input type="search" name="search" placeholder="Lieu, équipage, numéro de mission…"></label><details><summary>Filtres</summary><div class="grid" id="filterFields"></div><button class="primary" type="submit">Appliquer les filtres</button> <button type="reset">Réinitialiser les filtres</button></details></form><div id="history"></div></section>
+<div id="savedFlight" role="status"></div><h2>Bilan des vols</h2><div class="grid stats" id="stats"></div><section><h2>Historique des vols</h2><form id="filters"><label>Rechercher<input type="search" name="search" placeholder="Lieu, équipage, numéro de mission…"></label><details><summary>Filtres</summary><div class="grid" id="filterFields"></div><button class="primary" type="submit">Appliquer les filtres</button> <button type="reset">Réinitialiser les filtres</button></details></form><div id="history"></div></section>
 <section><h2>Heures</h2>
 <div class="grid"><label>Année<select id="fleetYear"><option value="">Toutes les années</option></select></label>
 <label>Mois<select id="fleetMonth"><option value="">Tous les mois</option></select></label>
@@ -53,7 +55,7 @@ button.stat:focus-visible{outline:3px solid #1769ac;outline-offset:3px}
 <div id="isaof"><label>Territoire<select name="territory"><option value="">Choisir</option><option value="0">Sur le territoire d’affectation</option><option value="1">Hors du territoire d’affectation</option></select></label>
 <label>Contrôle opérationnel<select name="control"><option value="">Choisir</option><option value="0">Sans contrôle opérationnel</option><option value="1">Sous contrôle opérationnel</option></select></label><label>Jours indemnisables<input name="paidDays" type="number" min="1" step="1"></label><small>Activité aéroterrestre, régime général. Vérifie le créneau complet de 23 h à 5 h.</small></div>
 <div id="issef"><label>Entrée en zone<input name="zoneIn" type="date"></label><label>Sortie de zone<input name="zoneOut" type="date"></label></div>
-<button id="calculate" type="button">Calculer avec mon profil enregistré</button> <output id="primeResult" aria-live="polite"></output></fieldset><div class="actions"><button class="primary">Enregistrer</button><button type="button" id="cancel">Annuler</button></div></form></dialog>
+<button id="calculate" type="button">Calculer avec mon profil enregistré</button> <output id="primeResult" aria-live="polite"></output></fieldset><div id="flightMessage" role="alert"></div><div class="actions"><button class="primary">Enregistrer</button><button type="button" id="cancel">Annuler</button></div></form></dialog>
 <script>
 'use strict';
 const $=id=>document.getElementById(id);
@@ -94,6 +96,14 @@ for(const [title,fields] of groups){const box=element('fieldset'),grid=element('
  const addStop=element('button','＋ Ajouter une escale');addStop.type='button';
  addStop.onclick=()=>appendStop().focus();grid.append(stopList,addStop);
  field(grid,fields[1]);
+ }else if(title==='Suivi'){
+   const label=element('label','Frais de mission'),toggle=element('select');
+   toggle.id='hasFees';toggle.add(new Option('Non','no'));toggle.add(new Option('Oui','yes'));
+   label.append(toggle);grid.append(label);
+   const details=element('div');details.id='trackingDetails';
+   field(details,['fee','État des frais',fees]);
+   field(details,fields[1]);details.append($('allowance'));box.append(details);
+   toggle.onchange=syncTracking;
  }else fields.forEach(f=>field(grid,f));
  $('fields').append(box)}
 for(const f of [['plane','Appareil',['',...aircraft]],['mission','Mission',['',...missions]],['fee','Frais',['',...fees]],['from','Du','date'],['to','Au','date']])field($('filterFields'),f,true);
@@ -215,6 +225,16 @@ function render(){
  const footer=element('div');footer.className='flight-footer';footer.append(feeRow(f));
  const edit=element('button','Modifier'),del=element('button','Supprimer');del.className='warn';edit.onclick=()=>openFlight(f);del.onclick=()=>{if(confirm('Supprimer ce vol du carnet ?'))change(list=>list.filter(x=>x.id!==f.id))};const buttons=element('div');buttons.className='actions';buttons.append(edit,del);footer.append(buttons);card.append(footer);$('history').append(card)}
 }
+function syncTracking(){
+ const active=$('hasFees').value==='yes';
+ $('trackingDetails').hidden=!active;
+ $('allowance').disabled=!active;
+ form.elements.notes.disabled=!active;
+ form.elements.fee.disabled=!active;
+ form.elements.fee.options[0].hidden=true;
+ if(active&&form.elements.fee.value==='Sans frais')form.elements.fee.value='En attente';
+ showScheme();
+}
 function openFlight(f){const now=new Date();const today=new Date(now-now.getTimezoneOffset()*60000).toISOString().slice(0,10);editing=f||null;form.reset();
  const roleSelect=form.elements.role;
  roleSelect.querySelector('[data-legacy]')?.remove();
@@ -223,13 +243,16 @@ function openFlight(f){const now=new Date();const today=new Date(now-now.getTime
   previous.dataset.legacy='';
   roleSelect.add(previous);
  }
- stopList.replaceChildren();for(const stop of f?.stops||[])appendStop(stop);const values=f||{departure:'Évreux',arrival:'Évreux',serviceCode:'22',start:today,end:today,hours:1,minutes:0,sectors:1,role:'ALM'};for(const [k,v] of Object.entries(values)){if(form.elements[k])form.elements[k].value=v}form.elements.end.min=form.elements.start.value;form.dataset.estimate=f?.estimate||'';showScheme();initialFields=readFields();$('editor').showModal()}
+ stopList.replaceChildren();for(const stop of f?.stops||[])appendStop(stop);const values=f||{departure:'Évreux',arrival:'Évreux',serviceCode:'22',start:today,end:today,hours:1,minutes:0,sectors:1,role:'ALM'};for(const [k,v] of Object.entries(values)){if(form.elements[k])form.elements[k].value=v}form.elements.end.min=form.elements.start.value;form.dataset.estimate=f?.estimate||'';$('hasFees').value=f&&(f.fee==='En attente'||f.fee==='Reçus'||f.scheme)?'yes':'no';syncTracking();$('flightMessage').textContent='';initialFields=readFields();$('editor').showModal()}
 form.elements.start.onchange=()=>{const {start,end}=form.elements;end.min=start.value;if(end.value<start.value)end.value=start.value};
 function readFields(){
  const fields=Object.fromEntries(new FormData(form));
  fields.stops=Array.from(stopList.querySelectorAll('input'),input=>input.value.trim()).filter(Boolean);
  for(const name of ['territory','control','paidDays','zoneIn','zoneOut'])fields[name]??='';
- fields.estimate=form.dataset.estimate||"";
+ fields.estimate=form.dataset.estimate||'';
+ if($('hasFees').value==='no'){
+   fields.fee='Sans frais';fields.notes=editing?.notes||'';fields.scheme='';fields.estimate='';
+ }
  return fields;
 }
 function mergeFlight(list,original,initial,draft){
@@ -259,9 +282,10 @@ form.onsubmit=async e=>{
  const button=form.querySelector('button.primary');
  if(button.disabled)return;
  button.disabled=true;
- if(form.elements.scheme.value && !form.dataset.estimate && !calculate()){button.disabled=false;return}
+ if($('hasFees').value==='yes' && form.elements.scheme.value && !form.dataset.estimate && !calculate()){$('flightMessage').textContent=$('primeResult').textContent;button.disabled=false;return}
  const original=editing,initial=initialFields,draft=readFields();
- try{if(await change(list=>mergeFlight(list,original,initial,draft)))$('editor').close()}
+ try{if(await change(list=>mergeFlight(list,original,initial,draft))){$('editor').close();$('savedFlight').textContent='Mission enregistrée.'}else $('flightMessage').textContent='Mission non enregistrée. Vérifie le message affiché.'}
+ catch(error){$('flightMessage').textContent='Enregistrement interrompu : '+error.message}
  finally{button.disabled=false}
 };
 $('add').onclick=()=>openFlight();$('cancel').onclick=()=>$('editor').close();filters.elements.search.oninput=render;
@@ -345,16 +369,19 @@ try{
  const p=savedProfile();
  for(const name of ['alias','grade','family','salary','births'])profileForm.elements[name].value=p[name]??'';
 }catch{$('profileMessage').textContent='Lecture du profil impossible.'}
-function children(text){
+function parseBirthDates(text){
  const dates=(text||'').trim().split(/\s+/).filter(Boolean);
  for(const date of dates){
    if(!/^\d{4}-\d\d-\d\d$/.test(date)||!Number.isFinite(Date.parse(date))||new Date(date).toISOString().slice(0,10)!==date)throw Error('Vérifie les dates de naissance (AAAA-MM-JJ).');
  }
  return dates;
 }
+for(const [target,id] of [[profileForm,'profileMessage'],[form,'flightMessage']]){
+ target.addEventListener('invalid',e=>{$(id).textContent=(e.target.labels?.[0]?.firstChild?.textContent||'Champ')+' : '+e.target.validationMessage},true);
+}
 profileForm.onsubmit=e=>{
  e.preventDefault();
- try{const p=Object.fromEntries(new FormData(profileForm));children(p.births);localStorage.setItem(profileKey,JSON.stringify(p));$('profileMessage').textContent='Profil enregistré.'}
+ try{const p=Object.fromEntries(new FormData(profileForm));parseBirthDates(p.births);localStorage.setItem(profileKey,JSON.stringify(p));$('profileMessage').textContent='Profil enregistré.'}
  catch(error){$('profileMessage').textContent=error.message}
 };
 function showScheme(){
@@ -392,7 +419,7 @@ function calculate(){
      amount=rates[p.grade][4*Number(v.territory.value)+2*Number(v.control.value)+Number(p.family)]*v.paidDays.valueAsNumber;
    }else{
      if(v.zoneIn.value<v.start.value||v.zoneOut.value>v.end.value)throw Error('Les dates de zone doivent être comprises dans la mission.');
-     amount=isseEstimate(v.zoneIn.value,v.zoneOut.value,Number(p.salary),children(p.births));
+     amount=isseEstimate(v.zoneIn.value,v.zoneOut.value,Number(p.salary),parseBirthDates(p.births));
    }
    form.dataset.estimate=scheme+' estimée · '+amount.toLocaleString('fr-FR',{style:'currency',currency:'EUR'});
    $('primeResult').textContent=form.dataset.estimate;return true;
