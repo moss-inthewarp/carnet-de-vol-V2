@@ -52,7 +52,7 @@ button.stat:focus-visible{outline:3px solid #1769ac;outline-offset:3px}
 <label>Dates de naissance des enfants à charge pour la mission, une par ligne (AAAA-MM-JJ)<textarea name="births" placeholder="AAAA-MM-JJ"></textarea></label>
 <button>Enregistrer mon profil</button> <span id="profileMessage" role="status"></span></form><small>Barème aéroterrestre de l’arrêté du 17 décembre 2021. ISSE à solde mensuelle, décret n° 97-901. Pour une mission passée, renseigne la situation applicable à cette période. Profil local à cet appareil. Les estimations enregistrées figurent dans la sauvegarde des missions.</small></details></section><section><details><summary>Sauvegarde du carnet</summary><p>Les vols sont enregistrés sur cet appareil. Exporte une copie pour les conserver ou les transférer.</p><p id="backupStatus"></p><button id="backup">Exporter les vols</button> <label>Importer une sauvegarde web<input id="restore" type="file" accept=".json,application/json"></label></details><p id="offline" role="status"></p></section><section><details><summary>Paramètres du référentiel</summary><p>Références publiques vérifiées le 24 novembre 2026. Sélectionne l’activité figurant sur ton ordre de mission. Les textes cités ne précisent aucun terrain OACI. Tu peux ajouter tes propres règles par terrain.</p><details><summary>Consulter les références officielles</summary><div id="officialList"></div></details><p></p><form id="refForm"><div class="grid">
 <label>Pays<input name="country" required></label><label>Terrain (code OACI)<input name="icao" required pattern="[A-Za-z]{4}" maxlength="4" autocapitalize="characters"></label><label>Nom de l’opération<input name="operation" required></label><label>Régime<select name="regime"><option>Aucun</option><option>ISAO</option><option>ISSE</option></select></label><label>Valide du<input name="since" type="date" required></label><label>Au (inclus)<input name="until" type="date" required></label></div><button>Enregistrer la règle</button> <button id="cancelRule" type="reset" hidden>Annuler</button></form><p id="refStatus" role="status"></p><div id="rules"></div></details></section>
-<section><h2>Simulation de frais</h2><form id="simulation"><div class="grid"><label>Début de mission<input name="start" type="date"></label><label>Fin de mission<input name="end" type="date"></label></div><label>Opération et terrain<select name="refContext"><option value="">Saisie libre</option></select></label><small class="proposal" role="status"></small><div id="sim-allowance"><label>Prime de mission<select name="scheme"><option value="">Aucune prime renseignée</option><option>ISAO</option><option>ISSE</option></select></label>
+<section><h2>Simulation de frais</h2><form id="simulation"><label>Pays de destination<select name="destinationCountry"></select></label><div class="grid"><label>Début de mission<input name="start" type="date"></label><label>Fin de mission<input name="end" type="date"></label></div><label>Opération et terrain<select name="refContext"><option value="">Saisie libre</option></select></label><small class="proposal" role="status"></small><div id="sim-allowance"><label>Prime de mission<select name="scheme"><option value="">Aucune prime renseignée</option><option>ISAO</option><option>ISSE</option></select></label>
 <div id="sim-isaof"><label>Territoire<select name="territory"><option value="">Choisir</option><option value="0">Sur le territoire d’affectation</option><option value="1">Hors du territoire d’affectation</option></select></label>
 <label>Contrôle opérationnel<select name="control"><option value="">Choisir</option><option value="0">Sans contrôle opérationnel</option><option value="1">Sous contrôle opérationnel</option></select></label><label>Jours indemnisables<input name="paidDays" type="number" min="1" step="1"></label><small>Activité aéroterrestre, régime général. Vérifie le créneau complet de 23 h à 5 h.</small></div>
 <div id="sim-issef"><label>Entrée en zone<input name="zoneIn" type="date"></label><label>Sortie de zone<input name="zoneOut" type="date"></label></div>
@@ -461,9 +461,19 @@ officialRules.push(
 function allRules(){return [...officialRules,...rules()]}
 function rules(){return JSON.parse(localStorage.getItem(ruleKey)||'[]')}
 function contextOf(r){return [r.operation,r.country,r.icao].filter(Boolean).join(' · ')}
+function countryKey(country){return (country||'').trim().toLocaleLowerCase('fr')}
+function fillCountries(){
+ const select=sim.elements.destinationCountry,previous=select.value;
+ const countries=new Map();
+ for(const rule of allRules())if(rule.country)countries.set(countryKey(rule.country),rule.country.trim());
+ select.replaceChildren(new Option('Tous les pays / saisie libre',''));
+ for(const [key,label] of [...countries].sort((a,b)=>a[1].localeCompare(b[1],'fr')))select.add(new Option(label,key));
+ if(countries.has(previous))select.value=previous;
+}
 function fillContexts(target,value){
  const select=target.elements.refContext;
- const names=new Set(allRules().map(contextOf));
+ const country=target===sim?sim.elements.destinationCountry.value:'';
+ const names=new Set(allRules().filter(r=>!country||countryKey(r.country)===country).map(contextOf));
  if(value)names.add(value);
  select.replaceChildren(new Option('Saisie libre',''),...Array.from(names).sort().map(name=>new Option(name,name)));
  select.value=value;
@@ -477,6 +487,7 @@ function renderRules(){
    remove.onclick=()=>{if(confirm('Supprimer cette règle ?'))saveRules(rules().filter(item=>item.id!==r.id))};
    list.append(row);
  }
+ fillCountries();
  fillContexts(sim,sim.elements.refContext.value);
  if(!$('editor').open)fillContexts(form,'');
  refresh(sim,true);
@@ -498,14 +509,16 @@ function refresh(target,propose){
  const v=target.elements,manual=target.dataset.override==='yes',selected=v.refContext.value;
  const start=v.start.value,end=v.end.value;
  const complete=Boolean(start && end);
- const matching=selected?allRules().filter(r=>contextOf(r)===selected &&
+ const country=target===sim?v.destinationCountry.value:'';
+ const hasContext=Boolean(country||selected);
+ const matching=hasContext?allRules().filter(r=>(selected?contextOf(r)===selected:countryKey(r.country)===country) &&
    (!complete || start<=end) &&
    [start,end].every(date=>!date || (date>=r.since && (!r.until || date<=r.until)))):[];
  const regimes=new Set(matching.map(r=>r.regime));
  const suggestion=regimes.size===1?[...regimes][0]:null;
- target.querySelector('.proposal').textContent=selected?(suggestion?'Régime proposé : '+suggestion+(complete?'.':' · à confirmer avec les dates de mission.'):regimes.size?'Règles contradictoires. Choisis le régime manuellement.':'Aucune règle couvrant toute la mission.')+(manual?' Choix manuel actif.':''):'';
- if(propose && selected && !manual)v.scheme.value=suggestion==='Aucun'?'':suggestion||'';
- if(propose && selected && !manual && suggestion==='ISAO' && matching.length && matching.every(r=>r.control===matching[0].control) && matching[0].control!==undefined)v.control.value=matching[0].control;
+ target.querySelector('.proposal').textContent=hasContext?(suggestion?'Régime proposé : '+suggestion+(complete?'.':' · à confirmer avec les dates de mission.'):regimes.size?'Plusieurs régimes possibles. Précise l’opération ou choisis le régime manuellement.':'Aucune règle couvrant toute la mission.')+(country&&!selected&&matching.length?' Opération à confirmer : '+[...new Set(matching.map(r=>r.operation))].join(', ')+'.':'')+(manual?' Choix manuel actif.':''):'';
+ if(propose && hasContext && !manual)v.scheme.value=suggestion==='Aucun'?'':suggestion||'';
+ if(propose && hasContext && !manual && suggestion==='ISAO' && matching.length && matching.every(r=>r.control===matching[0].control) && matching[0].control!==undefined)v.control.value=matching[0].control;
  if(target===form){
    showScheme();
    if(v.scheme.value&&!v.scheme.disabled)calculate();
@@ -517,9 +530,14 @@ function refresh(target,propose){
 }
 function updateProposal(target,event){
  const name=event.target.name;
+ if(name==='destinationCountry'){
+   target.dataset.override='';
+   target.elements.scheme.value='';
+   fillContexts(target,'');
+ }
  if(name==='refContext'){target.dataset.override='';if(!event.target.value)target.elements.scheme.value=''}
  if(name==='scheme')target.dataset.override='yes';
- refresh(target,['refContext','start','end'].includes(name));
+ refresh(target,['destinationCountry','refContext','start','end'].includes(name));
 }
 sim.oninput=e=>updateProposal(sim,e);
 sim.onsubmit=e=>e.preventDefault();
