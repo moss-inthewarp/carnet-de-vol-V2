@@ -56,7 +56,7 @@ button.stat:focus-visible{outline:3px solid #1769ac;outline-offset:3px}
 <div id="sim-isaof"><label>Territoire<select name="territory"><option value="">Choisir</option><option value="0">Sur le territoire d’affectation</option><option value="1">Hors du territoire d’affectation</option></select></label>
 <label>Contrôle opérationnel<select name="control"><option value="">Choisir</option><option value="0">Sans contrôle opérationnel</option><option value="1">Sous contrôle opérationnel</option></select></label><label>Jours indemnisables<input name="paidDays" type="number" min="1" step="1"></label><small>Activité aéroterrestre, régime général. Vérifie le créneau complet de 23 h à 5 h.</small></div>
 <div id="sim-issef"><label>Entrée en zone<input name="zoneIn" type="date"></label><label>Sortie de zone<input name="zoneOut" type="date"></label></div>
- <output id="sim-primeResult" aria-live="polite"></output></div></form></section><footer>Dernière mise à jour de l’application · <time datetime="2026-11-24">24 novembre 2026</time></footer></main>
+ <output id="sim-primeResult" aria-live="polite"></output></div></form></section><footer>Dernière mise à jour de l’application · <time datetime="2026-11-25">25 novembre 2026</time></footer></main>
 <dialog id="editor"><form id="flight"><h2>Fiche de vol</h2><datalist id="terrains"></datalist><div id="fields"></div><div id="allowance"><label>Opération et terrain<select name="refContext"><option value="">Saisie libre</option></select></label><small class="proposal" role="status"></small><label>Prime de mission<select name="scheme"><option value="">Aucune prime renseignée</option><option>ISAO</option><option>ISSE</option></select></label>
 <div id="isaof"><label>Territoire<select name="territory"><option value="">Choisir</option><option value="0">Sur le territoire d’affectation</option><option value="1">Hors du territoire d’affectation</option></select></label>
 <label>Contrôle opérationnel<select name="control"><option value="">Choisir</option><option value="0">Sans contrôle opérationnel</option><option value="1">Sous contrôle opérationnel</option></select></label><label>Jours indemnisables<input name="paidDays" type="number" min="1" step="1"></label><small>Activité aéroterrestre, régime général. Vérifie le créneau complet de 23 h à 5 h.</small></div>
@@ -496,10 +496,14 @@ ruleForm.onsubmit=e=>{
 };
 function refresh(target,propose){
  const v=target.elements,manual=target.dataset.override==='yes',selected=v.refContext.value;
- const matching=selected?allRules().filter(r=>contextOf(r)===selected && v.start.value && v.end.value>=v.start.value && r.since<=v.start.value && (!r.until||r.until>=v.end.value)):[];
+ const start=v.start.value,end=v.end.value;
+ const complete=Boolean(start && end);
+ const matching=selected?allRules().filter(r=>contextOf(r)===selected &&
+   (!complete || start<=end) &&
+   [start,end].every(date=>!date || (date>=r.since && (!r.until || date<=r.until)))):[];
  const regimes=new Set(matching.map(r=>r.regime));
  const suggestion=regimes.size===1?[...regimes][0]:null;
- target.querySelector('.proposal').textContent=selected?(suggestion?'Régime proposé : '+suggestion+'.':regimes.size?'Règles contradictoires. Choisis le régime manuellement.':'Aucune règle couvrant toute la mission.')+(manual?' Choix manuel actif.':''):'';
+ target.querySelector('.proposal').textContent=selected?(suggestion?'Régime proposé : '+suggestion+(complete?'.':' · à confirmer avec les dates de mission.'):regimes.size?'Règles contradictoires. Choisis le régime manuellement.':'Aucune règle couvrant toute la mission.')+(manual?' Choix manuel actif.':''):'';
  if(propose && selected && !manual)v.scheme.value=suggestion==='Aucun'?'':suggestion||'';
  if(propose && selected && !manual && suggestion==='ISAO' && matching.length && matching.every(r=>r.control===matching[0].control) && matching[0].control!==undefined)v.control.value=matching[0].control;
  if(target===form){
